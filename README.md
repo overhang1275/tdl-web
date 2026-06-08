@@ -34,7 +34,7 @@ Por defecto en producción:
 sudo bash install.sh
 ```
 
-El script instala Python, Redis, Nginx, crea el usuario `telegramdl`, crea el virtualenv, instala dependencias, copia systemd units y arranca los servicios.
+El script instala Python, Redis, Nginx, `tdl`, crea el usuario `telegramdl`, crea el virtualenv, instala dependencias, copia systemd units y arranca los servicios.
 
 Edita `/etc/telegram-downloader/telegram-downloader.env` y ajusta:
 
@@ -51,7 +51,13 @@ sudo systemctl restart telegram-downloader-web telegram-downloader-worker
 
 ## Instalar tdl
 
-`tdl` no se empaqueta dentro de este proyecto. Instálalo siguiendo la documentación oficial de `tdl` para Linux y deja el binario accesible en la ruta configurada por `TDL_BINARY`.
+`install.sh` instala `tdl` automáticamente con el instalador oficial:
+
+```bash
+curl -sSL https://docs.iyear.me/tdl/install.sh | sudo bash
+```
+
+Si ya tienes `tdl` instalado, el script lo respeta y ajusta `TDL_BINARY` en `/etc/telegram-downloader/telegram-downloader.env`.
 
 Verifica:
 
@@ -175,6 +181,7 @@ sudo systemctl start telegram-downloader-web telegram-downloader-worker
 ## Troubleshooting
 
 - `tdl binary not found`: ajusta `TDL_BINARY` en el env file.
+- Redis no disponible al crear jobs: confirma `sudo systemctl status redis-server`.
 - Sesión no detectada: ejecuta el login CLI como `telegramdl`.
 - Jobs quedan pending: revisa Redis y `telegram-downloader-worker`.
 - Errores de permisos: confirma dueño `telegramdl:telegramdl` en `/opt/telegram-downloader`.
