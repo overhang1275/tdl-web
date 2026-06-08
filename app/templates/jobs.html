@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Jobs</h1>
+    <p>Crear descargas y revisar historial.</p>
+  </div>
+</section>
+
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+
+<section class="panel">
+  <h2>Nueva descarga</h2>
+  <form method="post" action="/jobs" class="grid-form">
+    <label>Chat ID <input name="chat_id" required placeholder="-1001234567890 o @canal" value="{{ prefill.chat_id or '' }}"></label>
+    <label>Título <input name="chat_title" placeholder="Opcional" value="{{ prefill.chat_title or '' }}"></label>
+    <label>Hashtag <input name="hashtag" placeholder="#tag"></label>
+    <label>Tipo
+      <select name="media_type">
+        <option value="all">all</option>
+        <option value="video">video</option>
+        <option value="image">image</option>
+        <option value="audio">audio</option>
+        <option value="document">document</option>
+      </select>
+    </label>
+    <label>Texto <input name="search_text" placeholder="Búsqueda opcional"></label>
+    <label>Desde <input name="date_from" type="date"></label>
+    <label>Hasta <input name="date_to" type="date"></label>
+    <label>Subcarpeta <input name="output_subfolder" required value="{{ prefill.output_subfolder or 'download' }}"></label>
+    <label class="check"><input name="skip_same" type="checkbox" checked> Skip same</label>
+    <button class="button" type="submit">Crear job</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Historial</h2>
+  {% include "partials/jobs_table.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,9 @@
+<div id="login-output"
+     {% if login_session.running %}hx-get="/setup/login/output" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <pre class="logs login-output">{% if login_session.output %}{% for line in login_session.output[-300:] %}{{ line }}
+{% endfor %}{% else %}Login no iniciado.{% endif %}</pre>
+  {% if login_session.finished_at %}
+  <p>Proceso terminado con código: <strong>{{ login_session.returncode }}</strong></p>
+  {% endif %}
+</div>
+

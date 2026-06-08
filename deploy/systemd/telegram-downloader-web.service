@@ -1,0 +1,19 @@
+[Unit]
+Description=Telegram Downloader FastAPI web
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+User=telegramdl
+Group=telegramdl
+WorkingDirectory=/opt/telegram-downloader/app
+EnvironmentFile=/etc/telegram-downloader/telegram-downloader.env
+ExecStart=/opt/telegram-downloader/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

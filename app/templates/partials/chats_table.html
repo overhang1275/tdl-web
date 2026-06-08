@@ -1,0 +1,24 @@
+<h2>Chats</h2>
+{% if error %}
+<div class="notice error">{{ error }}</div>
+{% elif chats %}
+<table>
+  <thead><tr><th>ID</th><th>Nombre</th><th>Username</th><th>Tipo</th><th>Topics</th><th></th></tr></thead>
+  <tbody>
+    {% for chat in chats %}
+    <tr>
+      <td><code>{{ chat.id }}</code></td>
+      <td>{{ chat.title or chat.visible_name or "Sin nombre" }}</td>
+      <td>{% if chat.username %}@{{ chat.username }}{% else %}-{% endif %}</td>
+      <td>{{ chat.type or "" }}</td>
+      <td>{{ chat.topics_count or 0 }}</td>
+      <td>
+        <a class="button small" href="/jobs?chat_id={{ chat.id | urlencode }}&chat_title={{ (chat.title or chat.visible_name or '') | urlencode }}">Crear job</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No se encontraron chats.</p>
+{% endif %}

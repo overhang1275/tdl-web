@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Job #{{ job.id }}</h1>
+    <p>{{ job.chat_title or job.chat_id }}</p>
+  </div>
+  <a class="button" href="/downloads/{{ job.id }}">Archivos</a>
+</section>
+
+<section class="panel" id="job-status" hx-get="/jobs/{{ job.id }}/status" hx-trigger="load, every 3s" hx-swap="innerHTML">
+  {% include "partials/job_status.html" %}
+</section>
+
+<section class="panel">
+  <h2>Logs</h2>
+  <div hx-get="/jobs/{{ job.id }}/logs" hx-trigger="load, every 3s" hx-swap="innerHTML">
+    {% include "partials/job_logs.html" %}
+  </div>
+</section>
+{% endblock %}

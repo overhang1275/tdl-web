@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Setup</h1>
+    <p>Sesión Telegram/tdl: <strong>{{ "activa" if logged_in else "no detectada" }}</strong></p>
+  </div>
+</section>
+
+{% if message %}<div class="notice">{{ message }}</div>{% endif %}
+
+<section class="panel">
+  <h2>tdl instalado</h2>
+  <div class="status-grid">
+    <div><span>Binario</span><strong>{{ tdl_binary }}</strong></div>
+    <div><span>Storage</span><strong>{{ tdl_storage }}</strong></div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Login por código</h2>
+  <p>Inicia el proceso y responde aquí cada prompt de <code>tdl</code>: teléfono, código de Telegram y password 2FA si aplica.</p>
+  <form hx-post="/setup/login/start" hx-target="#login-console" hx-swap="innerHTML">
+    <button class="button" type="submit">Iniciar login por código</button>
+  </form>
+  <div id="login-console" class="console-panel">
+    {% include "partials/login_console.html" %}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Login por terminal</h2>
+  <p>Si el proceso web no recibe prompts por limitaciones de terminal de tu versión de <code>tdl</code>, usa este comando:</p>
+  <pre><code>{{ tdl_login_command }}</code></pre>
+  <p>Después regresa a esta página y refresca. La sesión se conserva en el storage mostrado arriba.</p>
+</section>
+{% endblock %}

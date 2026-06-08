@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Chats</h1>
+    <p>Canales y chats disponibles en la sesión de tdl.</p>
+  </div>
+  <button class="button" hx-get="/chats/list" hx-target="#chats-table" hx-swap="innerHTML">Refrescar</button>
+</section>
+
+<section id="chats-table" class="panel" hx-get="/chats/list" hx-trigger="load" hx-swap="innerHTML">
+  <p>Cargando chats...</p>
+</section>
+{% endblock %}

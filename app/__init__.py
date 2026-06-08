@@ -1,0 +1,2 @@
+"""Telegram Downloader web application."""
+

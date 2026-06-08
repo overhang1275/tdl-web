@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p>Estado de sesión: <strong>{{ "activa" if logged_in else "pendiente" }}</strong></p>
+  </div>
+  <a class="button" href="/jobs">Nueva descarga</a>
+</section>
+
+<section class="panel">
+  <h2>Jobs recientes</h2>
+  {% include "partials/jobs_table.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% if login_error %}
+<div class="notice error">{{ login_error }}</div>
+{% endif %}
+
+{% include "partials/login_output.html" %}
+{% include "partials/login_controls.html" %}

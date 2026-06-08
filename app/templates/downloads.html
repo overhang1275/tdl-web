@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Archivos job #{{ job.id }}</h1>
+    <p>{{ job.download_path }}</p>
+  </div>
+  <a class="button" href="/jobs/{{ job.id }}">Volver</a>
+</section>
+
+<section class="panel">
+  {% if files %}
+  <table>
+    <thead><tr><th>Archivo</th><th>Tamaño</th></tr></thead>
+    <tbody>
+      {% for file in files %}
+      <tr><td>{{ file.relative_path }}</td><td>{{ file.size }} bytes</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No hay archivos descargados todavía.</p>
+  {% endif %}
+</section>
+{% endblock %}

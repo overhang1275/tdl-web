@@ -1,0 +1,8 @@
+<h2>Progreso</h2>
+<div class="status-grid">
+  <div><span>Stage</span><strong>{{ job.stage.value }}</strong></div>
+  <div><span>Status</span><strong>{{ job.status.value }}</strong></div>
+  <div><span>Mensajes</span><strong>{{ job.total_filtered_messages }}</strong></div>
+  <div><span>Archivos</span><strong>{{ job.total_downloaded_files }}</strong></div>
+</div>
+{% if job.error_message %}<div class="notice error">{{ job.error_message }}</div>{% endif %}

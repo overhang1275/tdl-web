@@ -1,0 +1,22 @@
+<div id="login-controls">
+  {% if login_session.running %}
+  <form id="login-input-form"
+        class="inline-form"
+        hx-post="/setup/login/input"
+        hx-target="#login-output"
+        hx-swap="outerHTML"
+        hx-on::after-request="this.reset(); this.querySelector('input[name=value]').focus()">
+    <label>Respuesta para tdl
+      <input name="value" autocomplete="one-time-code" placeholder="Teléfono, código o password 2FA" autofocus required>
+    </label>
+    <button class="button" type="submit">Enviar</button>
+  </form>
+  <form class="inline-action" hx-post="/setup/login/cancel" hx-target="#login-console" hx-swap="innerHTML">
+    <button class="button secondary" type="submit">Cancelar login</button>
+  </form>
+  {% elif login_session.finished_at %}
+  <form hx-post="/setup/login/start" hx-target="#login-console" hx-swap="innerHTML">
+    <button class="button" type="submit">Iniciar de nuevo</button>
+  </form>
+  {% endif %}
+</div>
