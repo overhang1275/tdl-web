@@ -130,7 +130,7 @@ Ejemplo:
 ```bash
 curl -X POST http://127.0.0.1:8000/api/jobs \
   -H 'Content-Type: application/json' \
-  -d '{"chat_id":"-1001234567890","media_type":"video","output_subfolder":"videos","skip_same":true}'
+  -d '{"chat_id":"xxxxxxxxxx","media_type":"video","output_subfolder":"videos","skip_same":true}'
 ```
 
 ## Desarrollo local
