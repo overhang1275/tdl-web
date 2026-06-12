@@ -46,6 +46,7 @@ class DownloadJob(Base):
     date_from = mapped_column(Date, nullable=True)
     date_to = mapped_column(Date, nullable=True)
     skip_same: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    refresh_export: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     output_subfolder: Mapped[str] = mapped_column(String(128), nullable=False)
     export_json_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     filtered_json_path: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -58,4 +59,3 @@ class DownloadJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-

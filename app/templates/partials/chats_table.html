@@ -1,4 +1,32 @@
-<h2>Chats</h2>
+<div class="section-title">
+  <div>
+    <h2>Chats</h2>
+    {% if not error %}
+    <p>{{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }} chats{% if pagination.q %} para "{{ pagination.q }}"{% endif %}</p>
+    {% endif %}
+  </div>
+</div>
+
+<form class="list-toolbar">
+  <label>Buscar
+    <input
+      name="q"
+      type="search"
+      placeholder="Nombre, username o ID"
+      value="{{ pagination.q }}"
+      autocomplete="off">
+  </label>
+  <label>Mostrar
+    <select name="per_page">
+      {% for option in pagination.per_page_options %}
+      <option value="{{ option }}" {% if option == pagination.per_page %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <input type="hidden" name="page" value="1">
+  <button class="button secondary" type="submit">Buscar</button>
+</form>
+
 {% if error %}
 <div class="notice error">{{ error }}</div>
 {% elif chats %}
@@ -8,9 +36,9 @@
     {% for chat in chats %}
     <tr>
       <td><code>{{ chat.id }}</code></td>
-      <td>{{ chat.title or chat.visible_name or "Sin nombre" }}</td>
+      <td><strong>{{ chat.title or chat.visible_name or "Sin nombre" }}</strong></td>
       <td>{% if chat.username %}@{{ chat.username }}{% else %}-{% endif %}</td>
-      <td>{{ chat.type or "" }}</td>
+      <td><span class="pill">{{ chat.type or "chat" }}</span></td>
       <td>{{ chat.topics_count or 0 }}</td>
       <td>
         <a class="button small" href="/jobs?chat_id={{ chat.id | urlencode }}&chat_title={{ (chat.title or chat.visible_name or '') | urlencode }}">Crear job</a>
@@ -19,6 +47,24 @@
     {% endfor %}
   </tbody>
 </table>
+<div class="pagination">
+  <div class="pagination-summary">Página {{ pagination.page }} de {{ pagination.page_count }}</div>
+  <div class="pagination-actions">
+    {% if pagination.has_prev %}
+    <button class="button small secondary" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</button>
+    {% else %}
+    <button class="button small secondary" type="button" disabled>Anterior</button>
+    {% endif %}
+    {% if pagination.has_next %}
+    <button class="button small secondary" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</button>
+    {% else %}
+    <button class="button small secondary" type="button" disabled>Siguiente</button>
+    {% endif %}
+  </div>
+</div>
 {% else %}
-<p>No se encontraron chats.</p>
+<div class="empty-state">
+  <strong>No se encontraron chats.</strong>
+  <p>Prueba con otro nombre, username o ID.</p>
+</div>
 {% endif %}

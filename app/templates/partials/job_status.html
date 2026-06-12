@@ -2,6 +2,7 @@
 <div class="status-grid">
   <div><span>Stage</span><strong>{{ job.stage.value }}</strong></div>
   <div><span>Status</span><strong>{{ job.status.value }}</strong></div>
+  <div><span>Export</span><strong>{{ "actualiza" if job.refresh_export else "reutiliza" }}</strong></div>
   <div><span>Mensajes</span><strong>{{ job.total_filtered_messages }}</strong></div>
   <div><span>Archivos</span><strong>{{ job.total_downloaded_files }}</strong></div>
 </div>

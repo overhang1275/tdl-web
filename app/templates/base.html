@@ -5,19 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title or "Telegram Downloader" }}</title>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="/static/js/app.js?v=9" defer></script>
     <link rel="stylesheet" href="/static/css/app.css">
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand" href="/dashboard">Telegram Downloader</a>
-      <nav>
-        <a href="/setup">Setup</a>
-        <a href="/chats">Chats</a>
-        <a href="/jobs">Jobs</a>
-      </nav>
-    </header>
-    <main class="shell">
-      {% block content %}{% endblock %}
-    </main>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <a class="brand" href="/dashboard" aria-label="Dashboard">
+          <span class="brand-mark">T</span>
+          <span>
+            <strong>TDL Web</strong>
+            <small>Telegram media</small>
+          </span>
+        </a>
+        <nav class="nav-list">
+          <a class="{{ 'active' if request.url.path.startswith('/dashboard') else '' }}" href="/dashboard">
+            <span>Inicio</span>
+          </a>
+          <a class="{{ 'active' if request.url.path.startswith('/setup') else '' }}" href="/setup">
+            <span>Setup</span>
+          </a>
+          <a class="{{ 'active' if request.url.path.startswith('/chats') else '' }}" href="/chats">
+            <span>Chats</span>
+          </a>
+          <a class="{{ 'active' if request.url.path.startswith('/jobs') else '' }}" href="/jobs">
+            <span>Jobs</span>
+          </a>
+        </nav>
+      </aside>
+      <main class="shell">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
   </body>
 </html>

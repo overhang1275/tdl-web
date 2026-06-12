@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from app.database import SessionLocal, init_db
+from app.database import SessionLocal, engine, init_db
 from app.models import DownloadJob, JobStage, JobStatus
 from app.services.download import DownloadService
 from app.services.export import ExportService
@@ -13,6 +13,7 @@ from app.services.logs import append_job_log
 
 
 def run_download_job(job_id: int) -> None:
+    engine.dispose()
     init_db()
     db = SessionLocal()
     export_service = ExportService()
@@ -25,8 +26,12 @@ def run_download_job(job_id: int) -> None:
         job.stage = JobStage.exporting
         job.started_at = datetime.utcnow()
         db.commit()
-        append_job_log(job.id, f"Exporting chat {job.chat_id}")
-        export_service.export_chat(job.chat_id, Path(job.export_json_path))
+        export_path = Path(job.export_json_path)
+        if export_path.exists() and not job.refresh_export:
+            append_job_log(job.id, f"Reusing existing export: {export_path}")
+        else:
+            append_job_log(job.id, f"Exporting chat {job.chat_id}")
+            export_service.export_chat(job.chat_id, export_path)
 
         job.stage = JobStage.filtering
         db.commit()

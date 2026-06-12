@@ -3,15 +3,20 @@
 <section class="page-head">
   <div>
     <h1>Jobs</h1>
-    <p>Crear descargas y revisar historial.</p>
+    <p>Configura descargas y revisa el historial del canal.</p>
   </div>
 </section>
 
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 
 <section class="panel">
-  <h2>Nueva descarga</h2>
-  <form method="post" action="/jobs" class="grid-form">
+  <div class="section-title">
+    <div>
+      <h2>Nueva descarga</h2>
+      <p>Filtra el export y descarga solo el contenido que necesitas.</p>
+    </div>
+  </div>
+  <form method="post" action="/jobs" class="grid-form" data-disable-on-submit>
     <label>Chat ID <input name="chat_id" required placeholder="-1001234567890 o @canal" value="{{ prefill.chat_id or '' }}"></label>
     <label>Título <input name="chat_title" placeholder="Opcional" value="{{ prefill.chat_title or '' }}"></label>
     <label>Hashtag <input name="hashtag" placeholder="#tag"></label>
@@ -29,12 +34,38 @@
     <label>Hasta <input name="date_to" type="date"></label>
     <label>Subcarpeta <input name="output_subfolder" required value="{{ prefill.output_subfolder or 'download' }}"></label>
     <label class="check"><input name="skip_same" type="checkbox" checked> Skip same</label>
+    {% if prefill.export_exists %}
+    <label class="check wide">
+      <input name="refresh_export" type="checkbox">
+      Actualizar export.json existente
+    </label>
+    {% else %}
+    <input name="refresh_export" type="hidden" value="true">
+    {% endif %}
     <button class="button" type="submit">Crear job</button>
   </form>
+  {% if prefill.chat_id %}
+    {% if prefill.export_exists %}
+    <div class="notice">
+      Ya existe un <code>export.json</code> para este chat. Si no marcas actualizar, el job reutilizará el archivo existente y solo volverá a filtrar/descargar.
+      <br><code>{{ prefill.export_path }}</code>
+    </div>
+    {% else %}
+    <div class="notice">
+      No existe <code>export.json</code> para este chat. Este job lo creará en:
+      <br><code>{{ prefill.export_path }}</code>
+    </div>
+    {% endif %}
+  {% endif %}
 </section>
 
 <section class="panel">
-  <h2>Historial</h2>
+  <div class="section-title">
+    <div>
+      <h2>Historial</h2>
+      <p>Jobs recientes y estado de procesamiento.</p>
+    </div>
+  </div>
   {% include "partials/jobs_table.html" %}
 </section>
 {% endblock %}

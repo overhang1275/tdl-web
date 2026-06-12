@@ -18,6 +18,7 @@ class JobCreate(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     skip_same: bool = True
+    refresh_export: bool = True
     output_subfolder: str = Field(min_length=1, max_length=128)
 
     @field_validator("chat_id")
@@ -60,6 +61,7 @@ class JobRead(BaseModel):
     media_type: str
     search_text: str | None
     output_subfolder: str
+    refresh_export: bool
     stage: str
     status: str
     total_filtered_messages: int

@@ -7,6 +7,7 @@ Aplicación FastAPI para convertir un flujo `tdl` basado en bash en una interfaz
 - Detecta sesión activa de Telegram/`tdl`.
 - Lista chats/canales usando `tdl`.
 - Crea jobs con filtros por hashtag, tipo de medio, texto libre y rango de fechas.
+- Reutiliza `export.json` por chat para evitar exportar historiales grandes en cada job.
 - Ejecuta exportación, filtrado JSON y descarga en segundo plano con Redis + RQ.
 - Guarda historial en SQLite.
 - Escribe logs por job.
@@ -24,6 +25,20 @@ Por defecto en producción:
 - `/opt/telegram-downloader/data/downloads`
 - `/opt/telegram-downloader/data/logs`
 - `/etc/telegram-downloader/telegram-downloader.env`
+
+Los exports se guardan por chat:
+
+```text
+/opt/telegram-downloader/data/exports/<chat_id>/export.json
+```
+
+Cada job genera su propio filtrado:
+
+```text
+/opt/telegram-downloader/data/exports/<chat_id>/filtered-job-<job_id>.json
+```
+
+Cuando creas un job desde `/jobs`, si ya existe `export.json` para ese chat, la UI pregunta si quieres actualizarlo. Si no marcas esa opción, el job reutiliza el export existente y solo vuelve a filtrar/descargar.
 
 ## Instalación en LXC Debian 12 / Ubuntu 24.04
 

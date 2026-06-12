@@ -18,6 +18,7 @@ from app.services.files import list_downloaded_files
 from app.services.interactive_login import interactive_login_service
 from app.services.jobs import QueueUnavailableError, create_job, list_jobs
 from app.services.logs import read_job_log
+from app.services.paths import chat_path_key, safe_child
 from app.services.session import SessionService
 from app.services.tdl import TdlError, TdlService
 
@@ -47,7 +48,7 @@ def setup_context(request: Request, message: str | None = None) -> dict:
     }
 
 
-def job_prefill_from_request(request: Request) -> dict[str, str]:
+def job_prefill_from_request(request: Request) -> dict[str, object]:
     chat_id = request.query_params.get("chat_id", "").strip()
     chat_title = request.query_params.get("chat_title", "").strip()
     subfolder = request.query_params.get("output_subfolder", "").strip()
@@ -58,10 +59,21 @@ def job_prefill_from_request(request: Request) -> dict[str, str]:
             subfolder = sanitize_subfolder(chat_title[:80])
         except ValueError:
             subfolder = "download"
+    export_path = None
+    export_exists = False
+    if chat_id:
+        try:
+            export_path = safe_child(settings.exports_dir, chat_path_key(chat_id), "export.json")
+            export_exists = export_path.exists()
+        except ValueError:
+            export_path = None
     return {
         "chat_id": chat_id,
         "chat_title": chat_title,
         "output_subfolder": subfolder or "download",
+        "export_exists": export_exists,
+        "export_path": str(export_path) if export_path else "",
+        "refresh_export": not export_exists,
     }
 
 
@@ -242,18 +254,55 @@ def api_chats():
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def chat_search_text(chat: dict) -> str:
+    values = [
+        chat.get("id"),
+        chat.get("title"),
+        chat.get("visible_name"),
+        chat.get("username"),
+        chat.get("type"),
+    ]
+    return " ".join(str(value).lower() for value in values if value)
+
+
+def paginate_chats(chats: list[dict], q: str, page: int, per_page: int) -> dict:
+    per_page_options = [10, 25, 50, 100]
+    per_page = per_page if per_page in per_page_options else 25
+    q = q.strip()
+    filtered = [chat for chat in chats if q.lower() in chat_search_text(chat)] if q else chats
+    total = len(filtered)
+    page_count = max(1, (total + per_page - 1) // per_page)
+    page = min(max(page, 1), page_count)
+    start = (page - 1) * per_page
+    end = start + per_page
+    return {
+        "items": filtered[start:end],
+        "q": q,
+        "page": page,
+        "per_page": per_page,
+        "per_page_options": per_page_options,
+        "total": total,
+        "page_count": page_count,
+        "start": start + 1 if total else 0,
+        "end": min(end, total),
+        "has_prev": page > 1,
+        "has_next": page < page_count,
+    }
+
+
 @app.get("/chats/list", response_class=HTMLResponse)
-def chats_list(request: Request):
+def chats_list(request: Request, q: str = "", page: int = 1, per_page: int = 25):
     try:
         chats = TdlService().list_chats()
         error = None
     except TdlError as exc:
         chats = []
         error = str(exc)
+    pagination = paginate_chats(chats, q=q, page=page, per_page=per_page)
     return templates.TemplateResponse(
         request=request,
         name="partials/chats_table.html",
-        context={"chats": chats, "error": error},
+        context={"chats": pagination["items"], "error": error, "pagination": pagination},
     )
 
 
@@ -277,6 +326,7 @@ def jobs_create_form(
     date_from: date | None = Form(default=None),
     date_to: date | None = Form(default=None),
     skip_same: bool = Form(False),
+    refresh_export: bool = Form(False),
     output_subfolder: str = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -290,6 +340,7 @@ def jobs_create_form(
             date_from=date_from,
             date_to=date_to,
             skip_same=skip_same,
+            refresh_export=refresh_export,
             output_subfolder=output_subfolder,
         )
         job = create_job(db, payload)
@@ -305,6 +356,9 @@ def jobs_create_form(
                     "chat_id": chat_id,
                     "chat_title": chat_title or "",
                     "output_subfolder": output_subfolder,
+                    "export_exists": False,
+                    "export_path": "",
+                    "refresh_export": refresh_export,
                 },
             },
             status_code=503,
@@ -320,6 +374,9 @@ def jobs_create_form(
                     "chat_id": chat_id,
                     "chat_title": chat_title or "",
                     "output_subfolder": output_subfolder,
+                    "export_exists": False,
+                    "export_path": "",
+                    "refresh_export": refresh_export,
                 },
             },
             status_code=400,

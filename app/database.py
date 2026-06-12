@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 from sqlalchemy import create_engine
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import settings
@@ -20,6 +24,55 @@ def init_db() -> None:
 
     settings.ensure_directories()
     Base.metadata.create_all(bind=engine)
+    migrate_sqlite()
+    migrate_exports_to_chat_paths()
+
+
+def migrate_sqlite() -> None:
+    if not settings.database_url.startswith("sqlite"):
+        return
+    inspector = inspect(engine)
+    if "download_jobs" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("download_jobs")}
+    with engine.begin() as connection:
+        if "refresh_export" not in columns:
+            connection.execute(text("ALTER TABLE download_jobs ADD COLUMN refresh_export BOOLEAN NOT NULL DEFAULT 1"))
+
+
+def migrate_exports_to_chat_paths() -> None:
+    from app.services.paths import chat_path_key, safe_child
+
+    if not settings.database_url.startswith("sqlite"):
+        return
+    inspector = inspect(engine)
+    if "download_jobs" not in inspector.get_table_names():
+        return
+    with engine.begin() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT id, chat_id, export_json_path "
+                "FROM download_jobs "
+                "WHERE export_json_path IS NOT NULL "
+                "ORDER BY id DESC"
+            )
+        ).mappings()
+        migrated_chats: set[str] = set()
+        for row in rows:
+            chat_id = str(row["chat_id"])
+            if chat_id in migrated_chats:
+                continue
+            old_path = Path(str(row["export_json_path"]))
+            if not old_path.exists():
+                continue
+            try:
+                new_path = safe_child(settings.exports_dir, chat_path_key(chat_id), "export.json")
+            except ValueError:
+                continue
+            if not new_path.exists():
+                new_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(old_path, new_path)
+            migrated_chats.add(chat_id)
 
 
 def get_db():
@@ -28,4 +81,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
