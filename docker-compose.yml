@@ -1,0 +1,54 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      SECRET_KEY: change-this-long-random-value
+      DATA_DIR: /data
+      TDL_SESSIONS_DIR: /data/sessions
+      EXPORTS_DIR: /data/exports
+      DOWNLOADS_DIR: /data/downloads
+      LOGS_DIR: /data/logs
+      DATABASE_URL: sqlite:////data/telegram_downloader.sqlite3
+      REDIS_URL: redis://redis:6379/0
+      TDL_BINARY: tdl
+      TDL_NAMESPACE: default
+      COMMAND_TIMEOUT_SECONDS: "7200"
+    volumes:
+      - ./data:/data
+
+  worker:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - redis
+    command: ["python", "-m", "app.rq_worker"]
+    environment:
+      APP_ENV: production
+      SECRET_KEY: change-this-long-random-value
+      DATA_DIR: /data
+      TDL_SESSIONS_DIR: /data/sessions
+      EXPORTS_DIR: /data/exports
+      DOWNLOADS_DIR: /data/downloads
+      LOGS_DIR: /data/logs
+      DATABASE_URL: sqlite:////data/telegram_downloader.sqlite3
+      REDIS_URL: redis://redis:6379/0
+      TDL_BINARY: tdl
+      TDL_NAMESPACE: default
+      COMMAND_TIMEOUT_SECONDS: "7200"
+    volumes:
+      - ./data:/data
+
+volumes:
+  redis-data:

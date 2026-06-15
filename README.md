@@ -80,6 +80,61 @@ Verifica:
 sudo -u telegramdl /usr/local/bin/tdl version
 ```
 
+## Ejecutar con Docker Compose
+
+Docker no reemplaza la instalación LXC; es otra forma rápida de probar o desplegar sin instalar Python/Redis/tdl en el host. El contenedor instala `tdl`, levanta la web y un worker separado, y Redis corre como servicio aparte.
+
+```bash
+docker compose up --build
+```
+
+Abre:
+
+```text
+http://localhost:8000
+```
+
+Los datos quedan persistidos en `./data`:
+
+```text
+./data/sessions
+./data/exports
+./data/downloads
+./data/logs
+./data/telegram_downloader.sqlite3
+```
+
+Para ejecutar en segundo plano:
+
+```bash
+docker compose up -d --build
+docker compose logs -f web
+docker compose logs -f worker
+```
+
+Para detener:
+
+```bash
+docker compose down
+```
+
+### Login de tdl en Docker
+
+La sesión se guarda en `./data/sessions`, compartida por `web` y `worker`. Haz login una vez así:
+
+```bash
+docker compose run --rm web \
+  tdl --ns default \
+  --storage type=bolt,path=/data/sessions/tdl-data \
+  login --type code
+```
+
+Después levanta la app:
+
+```bash
+docker compose up -d
+```
+
 ## Login de Telegram/tdl
 
 La página `/setup` detecta si hay sesión activa y muestra el comando exacto para inicializarla. En `tdl 0.20.x`, el login es interactivo (`desktop`, `code` o `qr`) y no expone flags simples tipo `--phone --code --password`, así que debe inicializarse una sola vez por CLI:
@@ -154,7 +209,6 @@ curl -X POST http://127.0.0.1:8000/api/jobs \
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
 ```
 
 Los pins actuales están validados con Python 3.11+ y también instalan correctamente en Python 3.14. Si ya tenías un `.venv` creado antes de actualizar dependencias, recrearlo suele ser más limpio:
@@ -171,6 +225,20 @@ Worker:
 ```bash
 redis-server
 python -m app.rq_worker
+```
+
+Web:
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Para probar sin instalar servicios, puedes dejar el worker en segundo plano y correr la web en la misma terminal:
+
+```bash
+cd /ruta/al/tdl-web
+.venv/bin/python -m app.rq_worker &
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Tests:
