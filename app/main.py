@@ -1,22 +1,28 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime
+import mimetypes
+from pathlib import Path
+import shutil
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
+from redis import Redis
+from redis.exceptions import RedisError
+from rq import Worker
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db, init_db
 from app.models import DownloadJob
 from app.schemas import JobCreate, JobRead
-from app.services.files import list_downloaded_files
+from app.services.files import downloaded_file_path, file_kind, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
-from app.services.jobs import QueueUnavailableError, create_job, list_jobs
+from app.services.jobs import QueueUnavailableError, create_job, list_jobs, list_jobs_for_chat
 from app.services.logs import read_job_log
 from app.services.paths import chat_path_key, safe_child
 from app.services.session import SessionService
@@ -37,14 +43,57 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 def setup_context(request: Request, message: str | None = None) -> dict:
     tdl = TdlService()
+    status = system_status(tdl)
     return {
         "request": request,
-        "logged_in": SessionService(tdl).is_logged_in(),
+        "logged_in": status["session_active"],
+        "status": status,
         "message": message,
         "tdl_binary": tdl.binary,
         "tdl_storage": str(tdl.storage_path),
         "tdl_login_command": tdl.cli_login_command(),
         "login_session": interactive_login_service.status(),
+    }
+
+
+def system_status(tdl: TdlService | None = None) -> dict[str, object]:
+    tdl = tdl or TdlService()
+    login_session = interactive_login_service.status()
+    tdl_installed = bool(shutil.which(tdl.binary) or ("/" in tdl.binary and Path(tdl.binary).exists()))
+    try:
+        session_active = SessionService(tdl).is_logged_in()
+        session_error = None
+    except Exception as exc:
+        session_active = False
+        session_error = str(exc)
+    try:
+        redis = Redis.from_url(settings.redis_url)
+        redis.ping()
+        redis_connected = True
+        redis_error = None
+        workers = Worker.all(connection=redis)
+        worker_count = len(workers)
+        worker_connected = worker_count > 0
+    except (RedisError, Exception) as exc:
+        redis_connected = False
+        redis_error = str(exc)
+        worker_count = 0
+        worker_connected = False
+    last_login_error = login_session.error
+    if not last_login_error and login_session.returncode not in (None, 0):
+        last_login_error = f"tdl login terminó con código {login_session.returncode}"
+    return {
+        "session_active": session_active,
+        "session_error": session_error,
+        "tdl_installed": tdl_installed,
+        "tdl_binary": tdl.binary,
+        "redis_connected": redis_connected,
+        "redis_error": redis_error,
+        "worker_connected": worker_connected,
+        "worker_count": worker_count,
+        "last_login_error": last_login_error,
+        "storage": str(tdl.storage_path),
+        "redis_url": settings.redis_url,
     }
 
 
@@ -67,13 +116,17 @@ def job_prefill_from_request(request: Request) -> dict[str, object]:
             export_exists = export_path.exists()
         except ValueError:
             export_path = None
+    refresh_export_param = request.query_params.get("refresh_export")
+    refresh_export = not export_exists
+    if refresh_export_param is not None:
+        refresh_export = refresh_export_param.lower() in {"1", "true", "yes", "on"}
     return {
         "chat_id": chat_id,
         "chat_title": chat_title,
         "output_subfolder": subfolder or "download",
         "export_exists": export_exists,
         "export_path": str(export_path) if export_path else "",
-        "refresh_export": not export_exists,
+        "refresh_export": refresh_export,
     }
 
 
@@ -241,6 +294,11 @@ def api_session_status() -> dict[str, bool]:
     return {"logged_in": SessionService().is_logged_in()}
 
 
+@app.get("/api/setup/status")
+def api_setup_status():
+    return system_status()
+
+
 @app.get("/chats", response_class=HTMLResponse)
 def chats_page(request: Request):
     return templates.TemplateResponse(request=request, name="chats.html")
@@ -303,6 +361,44 @@ def chats_list(request: Request, q: str = "", page: int = 1, per_page: int = 25)
         request=request,
         name="partials/chats_table.html",
         context={"chats": pagination["items"], "error": error, "pagination": pagination},
+    )
+
+
+@app.get("/chats/{chat_id}", response_class=HTMLResponse)
+def chat_profile(request: Request, chat_id: str, db: Session = Depends(get_db)):
+    jobs = list_jobs_for_chat(db, chat_id)
+    chat_title = jobs[0].chat_title if jobs and jobs[0].chat_title else ""
+    chat = None
+    try:
+        for candidate in TdlService().list_chats():
+            if str(candidate.get("id")) == chat_id:
+                chat = candidate
+                chat_title = candidate.get("title") or candidate.get("visible_name") or chat_title
+                break
+    except TdlError:
+        chat = None
+    export_path = None
+    export_exists = False
+    export_updated_at = None
+    try:
+        export_path = safe_child(settings.exports_dir, chat_path_key(chat_id), "export.json")
+        export_exists = export_path.exists()
+        if export_exists:
+            export_updated_at = datetime.fromtimestamp(export_path.stat().st_mtime)
+    except ValueError:
+        export_path = None
+    return templates.TemplateResponse(
+        request=request,
+        name="chat_profile.html",
+        context={
+            "chat_id": chat_id,
+            "chat_title": chat_title,
+            "chat": chat,
+            "jobs": jobs,
+            "export_path": export_path,
+            "export_exists": export_exists,
+            "export_updated_at": export_updated_at,
+        },
     )
 
 
@@ -396,6 +492,25 @@ def api_list_jobs(db: Session = Depends(get_db)):
     return list_jobs(db)
 
 
+@app.get("/api/jobs/notifications")
+def api_job_notifications(db: Session = Depends(get_db)):
+    jobs = list_jobs(db)[:20]
+    return {
+        "jobs": [
+            {
+                "id": job.id,
+                "chat_id": job.chat_id,
+                "chat_title": job.chat_title,
+                "status": job.status.value,
+                "stage": job.stage.value,
+                "error_message": job.error_message,
+                "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+            }
+            for job in jobs
+        ]
+    }
+
+
 @app.get("/api/jobs/{job_id}", response_model=JobRead)
 def api_get_job(job_id: int, db: Session = Depends(get_db)):
     return get_job_or_404(db, job_id)
@@ -409,8 +524,9 @@ def api_job_logs(job_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/jobs/{job_id}/files")
 def api_job_files(job_id: int, db: Session = Depends(get_db)):
-    get_job_or_404(db, job_id)
-    return {"files": list_downloaded_files(job_id)}
+    job = get_job_or_404(db, job_id)
+    root = job_download_root(job.id, job.download_path)
+    return {"files": list_downloaded_files(root)}
 
 
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
@@ -438,8 +554,49 @@ def job_logs_partial(request: Request, job_id: int, db: Session = Depends(get_db
 @app.get("/downloads/{job_id}", response_class=HTMLResponse)
 def downloads_page(request: Request, job_id: int, db: Session = Depends(get_db)):
     job = get_job_or_404(db, job_id)
+    root = job_download_root(job.id, job.download_path)
     return templates.TemplateResponse(
         request=request,
         name="downloads.html",
-        context={"job": job, "files": list_downloaded_files(job_id)},
+        context={"job": job, "files": list_downloaded_files(root), "download_root": root},
+    )
+
+
+@app.get("/downloads/{job_id}/file")
+def download_file(job_id: int, path: str, download: bool = False, db: Session = Depends(get_db)):
+    job = get_job_or_404(db, job_id)
+    root = job_download_root(job.id, job.download_path)
+    try:
+        file_path = downloaded_file_path(root, path)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
+    media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        filename=file_path.name if download else None,
+        content_disposition_type="attachment" if download else "inline",
+    )
+
+
+@app.get("/downloads/{job_id}/preview", response_class=HTMLResponse)
+def preview_file(request: Request, job_id: int, path: str, db: Session = Depends(get_db)):
+    job = get_job_or_404(db, job_id)
+    root = job_download_root(job.id, job.download_path)
+    try:
+        file_path = downloaded_file_path(root, path)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
+    size = file_path.stat().st_size
+    file = {
+        "name": file_path.name,
+        "relative_path": path,
+        "size": size,
+        "human_size": human_size(size),
+        "kind": file_kind(file_path),
+    }
+    return templates.TemplateResponse(
+        request=request,
+        name="download_preview.html",
+        context={"job": job, "file": file},
     )

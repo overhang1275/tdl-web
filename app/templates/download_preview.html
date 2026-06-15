@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>{{ file.name }}</h1>
+    <p>{{ file.human_size }} · {{ file.kind }} · job #{{ job.id }}</p>
+  </div>
+  <div class="table-actions">
+    <a class="button secondary" href="/downloads/{{ job.id }}">Volver</a>
+    <a class="button" href="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}&download=true">Descargar</a>
+  </div>
+</section>
+
+<section class="panel preview-panel">
+  {% if file.kind == "image" %}
+  <img class="media-viewer" src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" alt="{{ file.name }}">
+  {% elif file.kind == "video" %}
+  <video class="media-viewer" src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" controls preload="metadata" playsinline></video>
+  {% elif file.kind == "audio" %}
+  <audio class="audio-viewer" src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" controls preload="metadata"></audio>
+  {% elif file.kind == "pdf" %}
+  <iframe class="document-viewer" src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" title="{{ file.name }}"></iframe>
+  {% elif file.kind == "text" %}
+  <iframe class="document-viewer" src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" title="{{ file.name }}"></iframe>
+  {% else %}
+  <div class="empty-state">
+    <strong>Este archivo no tiene vista previa.</strong>
+    <p>Descárgalo para abrirlo con otra aplicación.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -36,7 +36,7 @@
     <label class="check"><input name="skip_same" type="checkbox" checked> Skip same</label>
     {% if prefill.export_exists %}
     <label class="check wide">
-      <input name="refresh_export" type="checkbox">
+      <input name="refresh_export" type="checkbox" {% if prefill.refresh_export %}checked{% endif %}>
       Actualizar export.json existente
     </label>
     {% else %}

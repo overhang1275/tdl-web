@@ -41,7 +41,10 @@
       <td><span class="pill">{{ chat.type or "chat" }}</span></td>
       <td>{{ chat.topics_count or 0 }}</td>
       <td>
-        <a class="button small" href="/jobs?chat_id={{ chat.id | urlencode }}&chat_title={{ (chat.title or chat.visible_name or '') | urlencode }}">Crear job</a>
+        <div class="table-actions">
+          <a class="button small secondary" href="/chats/{{ chat.id | urlencode }}">Perfil</a>
+          <a class="button small" href="/jobs?chat_id={{ chat.id | urlencode }}&chat_title={{ (chat.title or chat.visible_name or '') | urlencode }}">Crear job</a>
+        </div>
       </td>
     </tr>
     {% endfor %}

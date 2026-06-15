@@ -3,17 +3,50 @@
 <section class="page-head">
   <div>
     <h1>Setup</h1>
-    <p>Sesión Telegram/tdl: <strong>{{ "activa" if logged_in else "no detectada" }}</strong></p>
+    <p>Estado de sesión y servicios base.</p>
   </div>
 </section>
 
 {% if message %}<div class="notice">{{ message }}</div>{% endif %}
 
 <section class="panel">
-  <h2>tdl instalado</h2>
-  <div class="status-grid">
-    <div><span>Binario</span><strong>{{ tdl_binary }}</strong></div>
-    <div><span>Storage</span><strong>{{ tdl_storage }}</strong></div>
+  <div class="section-title">
+    <div>
+      <h2>Estado del sistema</h2>
+      <p>Verifica sesión, binario, cola y worker antes de crear jobs.</p>
+    </div>
+  </div>
+  <div class="health-grid">
+    <div class="health-card {{ 'ok' if status.session_active else 'bad' }}">
+      <span>Sesión</span>
+      <strong>{{ "activa" if status.session_active else "no detectada" }}</strong>
+      {% if status.session_error %}<small>{{ status.session_error }}</small>{% endif %}
+    </div>
+    <div class="health-card {{ 'ok' if status.tdl_installed else 'bad' }}">
+      <span>tdl</span>
+      <strong>{{ "instalado" if status.tdl_installed else "no encontrado" }}</strong>
+      <small>{{ status.tdl_binary }}</small>
+    </div>
+    <div class="health-card {{ 'ok' if status.redis_connected else 'bad' }}">
+      <span>Redis</span>
+      <strong>{{ "conectado" if status.redis_connected else "sin conexión" }}</strong>
+      <small>{{ status.redis_url }}</small>
+    </div>
+    <div class="health-card {{ 'ok' if status.worker_connected else 'warn' }}">
+      <span>Worker</span>
+      <strong>{{ status.worker_count }} conectado{{ "" if status.worker_count == 1 else "s" }}</strong>
+      <small>{{ "listo para jobs" if status.worker_connected else "no hay workers escuchando" }}</small>
+    </div>
+    <div class="health-card {{ 'bad' if status.last_login_error else 'ok' }}">
+      <span>Último login</span>
+      <strong>{{ "sin errores" if not status.last_login_error else "con error" }}</strong>
+      {% if status.last_login_error %}<small>{{ status.last_login_error }}</small>{% endif %}
+    </div>
+    <div class="health-card">
+      <span>Storage</span>
+      <strong>tdl-data</strong>
+      <small>{{ status.storage }}</small>
+    </div>
   </div>
 </section>
 

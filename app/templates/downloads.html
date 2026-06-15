@@ -3,23 +3,99 @@
 <section class="page-head">
   <div>
     <h1>Archivos job #{{ job.id }}</h1>
-    <p>{{ job.download_path }}</p>
+    <p>{{ job.chat_title or job.chat_id }}</p>
   </div>
-  <a class="button" href="/jobs/{{ job.id }}">Volver</a>
+  <a class="button secondary" href="/jobs/{{ job.id }}">Volver</a>
 </section>
 
 <section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Descargas</h2>
+      <p>{{ files|length }} archivos en <code>{{ download_root }}</code></p>
+    </div>
+  </div>
+
   {% if files %}
-  <table>
-    <thead><tr><th>Archivo</th><th>Tamaño</th></tr></thead>
+  <div class="list-toolbar downloads-toolbar">
+    <label>Buscar
+      <input type="search" data-download-search placeholder="Nombre o carpeta">
+    </label>
+    <label>Tipo
+      <select data-download-kind>
+        <option value="">Todos</option>
+        <option value="image">Imágenes</option>
+        <option value="video">Videos</option>
+        <option value="audio">Audio</option>
+        <option value="pdf">PDF</option>
+        <option value="text">Texto</option>
+        <option value="file">Otros</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="download-gallery">
+    {% for file in files %}
+    <article class="download-card" data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}">
+      <div class="download-preview">
+        {% if file.kind == "image" %}
+        <img src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" alt="{{ file.name }}" loading="lazy">
+        {% elif file.kind == "video" %}
+        <div class="file-icon">video</div>
+        {% elif file.kind == "audio" %}
+        <div class="file-icon">audio</div>
+        {% elif file.kind == "pdf" %}
+        <div class="file-icon">pdf</div>
+        {% else %}
+        <div class="file-icon">{{ file.kind }}</div>
+        {% endif %}
+      </div>
+      <div class="download-meta">
+        <strong title="{{ file.relative_path }}">{{ file.name }}</strong>
+        <span>{{ file.human_size }} · {{ file.kind }}</span>
+      </div>
+      <div class="download-actions">
+        {% if file.can_preview %}
+        <a class="button small secondary" href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}">Ver</a>
+        {% endif %}
+        <a class="button small" href="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}&download=true">Descargar</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  <table class="downloads-table">
+    <thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th></th></tr></thead>
     <tbody>
       {% for file in files %}
-      <tr><td>{{ file.relative_path }}</td><td>{{ file.size }} bytes</td></tr>
+      <tr data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}">
+        <td>
+          <strong>{{ file.name }}</strong>
+          <small class="muted-line">{{ file.relative_path }}</small>
+        </td>
+        <td><span class="pill">{{ file.kind }}</span></td>
+        <td>{{ file.human_size }}</td>
+        <td>
+          <div class="table-actions">
+            {% if file.can_preview %}
+            <a class="button small secondary" href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}">Ver</a>
+            {% endif %}
+            <a class="button small" href="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}&download=true">Descargar</a>
+          </div>
+        </td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
+  <div class="empty-state" data-download-empty hidden>
+    <strong>No hay coincidencias.</strong>
+    <p>Cambia la búsqueda o el filtro de tipo.</p>
+  </div>
   {% else %}
-  <p>No hay archivos descargados todavía.</p>
+  <div class="empty-state">
+    <strong>No hay archivos descargados todavía.</strong>
+    <p>Cuando el job descargue contenido, aparecerá aquí.</p>
+  </div>
   {% endif %}
 </section>
 {% endblock %}

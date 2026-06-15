@@ -75,6 +75,17 @@ def list_jobs(db: Session) -> list[DownloadJob]:
     return list(db.scalars(select(DownloadJob).order_by(DownloadJob.created_at.desc())).all())
 
 
+def list_jobs_for_chat(db: Session, chat_id: str) -> list[DownloadJob]:
+    sync_pending_jobs_with_queue(db)
+    return list(
+        db.scalars(
+            select(DownloadJob)
+            .where(DownloadJob.chat_id == chat_id)
+            .order_by(DownloadJob.created_at.desc())
+        ).all()
+    )
+
+
 def sync_pending_jobs_with_queue(db: Session) -> None:
     pending_jobs = list(
         db.scalars(

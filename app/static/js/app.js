@@ -128,3 +128,98 @@ window.addEventListener("pageshow", () => {
     loadChats(trigger.getAttribute("data-chats-url"));
   });
 })();
+
+(() => {
+  function applyDownloadFilters() {
+    const search = document.querySelector("[data-download-search]");
+    const kind = document.querySelector("[data-download-kind]");
+    const empty = document.querySelector("[data-download-empty]");
+    if (!search || !kind) {
+      return;
+    }
+    const query = search.value.trim().toLowerCase();
+    const selectedKind = kind.value;
+    let visibleCards = 0;
+    document.querySelectorAll("[data-download-item]").forEach((item) => {
+      const matchesName = !query || (item.dataset.name || "").includes(query);
+      const matchesKind = !selectedKind || item.dataset.kind === selectedKind;
+      const visible = matchesName && matchesKind;
+      item.hidden = !visible;
+      if (visible && item.classList.contains("download-card")) {
+        visibleCards += 1;
+      }
+    });
+    if (empty) {
+      empty.hidden = visibleCards > 0;
+    }
+  }
+
+  window.addEventListener("input", (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.matches("[data-download-search]")) {
+      applyDownloadFilters();
+    }
+  });
+
+  window.addEventListener("change", (event) => {
+    if (event.target instanceof HTMLSelectElement && event.target.matches("[data-download-kind]")) {
+      applyDownloadFilters();
+    }
+  });
+})();
+
+(() => {
+  const storageKey = "tdl-web-job-statuses";
+  const terminalStatuses = new Set(["completed", "failed"]);
+
+  function readKnownStatuses() {
+    try {
+      return JSON.parse(window.localStorage.getItem(storageKey) || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function writeKnownStatuses(statuses) {
+    window.localStorage.setItem(storageKey, JSON.stringify(statuses));
+  }
+
+  function showToast(job) {
+    const root = document.querySelector("#toast-root");
+    if (!root) {
+      return;
+    }
+    const toast = document.createElement("a");
+    toast.className = `toast ${job.status === "failed" ? "error" : "ok"}`;
+    toast.href = `/jobs/${job.id}`;
+    const title = job.chat_title || job.chat_id || `Job #${job.id}`;
+    toast.innerHTML = `<strong>Job #${job.id} ${job.status === "failed" ? "falló" : "terminó"}</strong><span>${title}</span>`;
+    root.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 8000);
+  }
+
+  async function pollJobNotifications() {
+    try {
+      const response = await fetch("/api/jobs/notifications", { headers: { "Accept": "application/json" } });
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      const known = readKnownStatuses();
+      const next = { ...known };
+      for (const job of payload.jobs || []) {
+        const key = String(job.id);
+        const previous = known[key];
+        if (previous && previous !== job.status && terminalStatuses.has(job.status)) {
+          showToast(job);
+        }
+        next[key] = job.status;
+      }
+      writeKnownStatuses(next);
+    } catch {
+      return;
+    }
+  }
+
+  window.setTimeout(pollJobNotifications, 1500);
+  window.setInterval(pollJobNotifications, 6000);
+})();

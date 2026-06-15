@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>{{ chat_title or chat_id }}</h1>
+    <p><code>{{ chat_id }}</code>{% if chat and chat.username %} · @{{ chat.username }}{% endif %}</p>
+  </div>
+  <div class="table-actions">
+    <a class="button secondary" href="/chats">Chats</a>
+    <a class="button" href="/jobs?chat_id={{ chat_id|urlencode }}&chat_title={{ (chat_title or '')|urlencode }}">Crear job</a>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Export del chat</h2>
+      <p>Estado del archivo usado para evitar exportar historiales grandes en cada job.</p>
+    </div>
+  </div>
+  <div class="status-grid">
+    <div><span>Estado</span><strong>{{ "existe" if export_exists else "no existe" }}</strong></div>
+    <div><span>Actualizado</span><strong>{{ export_updated_at.strftime("%Y-%m-%d %H:%M") if export_updated_at else "-" }}</strong></div>
+    <div><span>Jobs</span><strong>{{ jobs|length }}</strong></div>
+  </div>
+  {% if export_path %}
+  <div class="notice"><code>{{ export_path }}</code></div>
+  {% endif %}
+  <div class="inline-action">
+    <a class="button" href="/jobs?chat_id={{ chat_id|urlencode }}&chat_title={{ (chat_title or '')|urlencode }}&refresh_export=true">Actualizar export.json</a>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Historial de jobs</h2>
+      <p>Descargas creadas para este chat.</p>
+    </div>
+  </div>
+  {% include "partials/jobs_table.html" %}
+</section>
+{% endblock %}
