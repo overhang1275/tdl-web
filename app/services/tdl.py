@@ -4,13 +4,19 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.config import settings
 
 
 class TdlError(RuntimeError):
+    pass
+
+
+class TdlCancelled(TdlError):
     pass
 
 
@@ -57,7 +63,12 @@ class TdlService:
         env.setdefault("TERM", "xterm-256color")
         return env
 
-    def _run(self, args: list[str], timeout: int | None = None) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        args: list[str],
+        timeout: int | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         self.ensure_runtime_dirs()
         full_args = [
             self.binary,
@@ -67,19 +78,47 @@ class TdlService:
             self.storage_arg,
             *args,
         ]
-        try:
-            result = subprocess.run(
-                full_args,
-                check=False,
-                capture_output=True,
-                text=True,
-                env=self._env(),
-                timeout=timeout or self.timeout,
-            )
-        except FileNotFoundError as exc:
-            raise TdlError(f"tdl binary not found: {self.binary}") from exc
-        except subprocess.TimeoutExpired as exc:
-            raise TdlError(f"tdl command timed out after {exc.timeout} seconds") from exc
+        started_at = time.monotonic()
+        limit = timeout or self.timeout
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout_file, tempfile.TemporaryFile(
+            mode="w+", encoding="utf-8"
+        ) as stderr_file:
+            try:
+                process = subprocess.Popen(
+                    full_args,
+                    stdout=stdout_file,
+                    stderr=stderr_file,
+                    env=self._env(),
+                    text=True,
+                )
+            except FileNotFoundError as exc:
+                raise TdlError(f"tdl binary not found: {self.binary}") from exc
+            while process.poll() is None:
+                if should_cancel and should_cancel():
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    stdout_file.seek(0)
+                    stderr_file.seek(0)
+                    details = (stderr_file.read() or stdout_file.read() or "tdl command cancelled").strip()
+                    raise TdlCancelled(details)
+                if time.monotonic() - started_at > limit:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    raise TdlError(f"tdl command timed out after {limit} seconds")
+                time.sleep(1)
+            stdout_file.seek(0)
+            stderr_file.seek(0)
+            stdout = stdout_file.read()
+            stderr = stderr_file.read()
+        result = subprocess.CompletedProcess(full_args, process.returncode, stdout, stderr)
         if result.returncode != 0:
             details = (result.stderr or result.stdout or "unknown tdl error").strip()
             raise TdlError(details)
@@ -135,15 +174,24 @@ class TdlService:
             "topics_count": len(chat.get("topics") or []),
         }
 
-    def export_chat(self, chat_id: str, output_path: Path) -> str:
+    def export_chat(self, chat_id: str, output_path: Path, should_cancel: Callable[[], bool] | None = None) -> str:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        result = self._run(["chat", "export", "-c", chat_id, "--with-content", "--all", "-o", str(output_path)])
+        result = self._run(
+            ["chat", "export", "-c", chat_id, "--with-content", "--all", "-o", str(output_path)],
+            should_cancel=should_cancel,
+        )
         return result.stdout.strip()
 
-    def download_from_file(self, filtered_json: Path, output_dir: Path, skip_same: bool = True) -> str:
+    def download_from_file(
+        self,
+        filtered_json: Path,
+        output_dir: Path,
+        skip_same: bool = True,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> str:
         output_dir.mkdir(parents=True, exist_ok=True)
         args = ["download", "-f", str(filtered_json), "-d", str(output_dir)]
         if skip_same:
             args.append("--skip-same")
-        result = self._run(args)
+        result = self._run(args, should_cancel=should_cancel)
         return result.stdout.strip()

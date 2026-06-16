@@ -8,6 +8,48 @@
   <a class="button" href="/jobs">Nueva descarga</a>
 </section>
 
+<section class="metric-grid">
+  <article class="metric-card">
+    <span>Activos</span>
+    <strong>{{ metrics.active_jobs }}</strong>
+    <small>pending / running</small>
+  </article>
+  <article class="metric-card">
+    <span>Fallidos</span>
+    <strong>{{ metrics.failed_jobs }}</strong>
+    <small>requieren revisión</small>
+  </article>
+  <article class="metric-card">
+    <span>Archivos</span>
+    <strong>{{ metrics.downloaded_files }}</strong>
+    <small>registrados en jobs</small>
+  </article>
+  <article class="metric-card">
+    <span>Disco usado</span>
+    <strong>{{ metrics.disk_usage }}</strong>
+    <small>carpeta downloads</small>
+  </article>
+</section>
+
+{% if metrics.latest_errors %}
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Últimos errores</h2>
+      <p>Fallos recientes para reintentar o limpiar.</p>
+    </div>
+  </div>
+  <div class="error-list">
+    {% for job in metrics.latest_errors %}
+    <a href="/jobs/{{ job.id }}" class="error-item">
+      <strong>#{{ job.id }} · {{ job.chat_title or job.chat_id }}</strong>
+      <span>{{ job.error_message or "Sin detalle" }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="panel">
   <div class="section-title">
     <div>

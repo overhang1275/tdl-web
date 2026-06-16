@@ -38,6 +38,8 @@ def migrate_sqlite() -> None:
     with engine.begin() as connection:
         if "refresh_export" not in columns:
             connection.execute(text("ALTER TABLE download_jobs ADD COLUMN refresh_export BOOLEAN NOT NULL DEFAULT 1"))
+        if "cancel_requested" not in columns:
+            connection.execute(text("ALTER TABLE download_jobs ADD COLUMN cancel_requested BOOLEAN NOT NULL DEFAULT 0"))
 
 
 def migrate_exports_to_chat_paths() -> None:

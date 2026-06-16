@@ -5,11 +5,45 @@
     <h1>Job #{{ job.id }}</h1>
     <p>{{ job.chat_title or job.chat_id }}</p>
   </div>
-  <a class="button" href="/downloads/{{ job.id }}">Archivos</a>
+  <div class="page-actions">
+    <a class="button secondary" href="/jobs?chat_id={{ job.chat_id|urlencode }}&chat_title={{ (job.chat_title or '')|urlencode }}">Nuevo parecido</a>
+    <a class="button" href="/downloads/{{ job.id }}">Archivos</a>
+  </div>
 </section>
 
 <section class="panel" id="job-status" hx-get="/jobs/{{ job.id }}/status" hx-trigger="load, every 3s" hx-swap="innerHTML">
   {% include "partials/job_status.html" %}
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Acciones</h2>
+      <p>Controla este job sin salir del historial.</p>
+    </div>
+  </div>
+  <div class="job-actions">
+    {% if job.status.value in ["pending", "running"] %}
+    <form method="post" action="/jobs/{{ job.id }}/cancel">
+      <button class="button danger" type="submit">Cancelar job</button>
+    </form>
+    {% endif %}
+    {% if job.status.value in ["failed", "cancelled"] %}
+    <form method="post" action="/jobs/{{ job.id }}/retry" data-disable-on-submit>
+      <button class="button" type="submit">Reintentar</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <details class="cleanup-box">
+    <summary>Eliminar / limpiar datos</summary>
+    <form method="post" action="/jobs/{{ job.id }}/delete" class="cleanup-form">
+      <label class="check"><input name="delete_logs" type="checkbox" checked> Borrar logs</label>
+      <label class="check"><input name="delete_filtered" type="checkbox" checked> Borrar filtered-job</label>
+      <label class="check"><input name="delete_downloads" type="checkbox"> Borrar descargas de este job</label>
+      <button class="button danger" type="submit">Eliminar job</button>
+    </form>
+  </details>
 </section>
 
 <section class="panel">

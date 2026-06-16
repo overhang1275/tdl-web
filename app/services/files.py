@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+from datetime import datetime
 from pathlib import Path
 
 from app.config import settings
@@ -43,6 +44,7 @@ def list_downloaded_files(root: Path) -> list[dict[str, str | int | bool]]:
             if any(part.startswith(".") for part in path.relative_to(root).parts):
                 continue
             size = path.stat().st_size
+            modified_at = int(path.stat().st_mtime)
             kind = file_kind(path)
             files.append(
                 {
@@ -50,6 +52,8 @@ def list_downloaded_files(root: Path) -> list[dict[str, str | int | bool]]:
                     "relative_path": relative,
                     "size": size,
                     "human_size": human_size(size),
+                    "modified_at": modified_at,
+                    "modified_label": datetime.fromtimestamp(modified_at).strftime("%Y-%m-%d %H:%M"),
                     "kind": kind,
                     "can_preview": kind in {"image", "video", "audio", "pdf", "text"},
                 }
@@ -74,3 +78,16 @@ def count_downloaded_files(path: Path) -> int:
     if not path.exists():
         return 0
     return sum(1 for item in path.rglob("*") if item.is_file())
+
+
+def directory_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    total = 0
+    for item in path.rglob("*"):
+        if item.is_file():
+            try:
+                total += item.stat().st_size
+            except OSError:
+                continue
+    return total

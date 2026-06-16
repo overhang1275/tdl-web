@@ -14,16 +14,17 @@ from pydantic import ValidationError
 from redis import Redis
 from redis.exceptions import RedisError
 from rq import Worker
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db, init_db
-from app.models import DownloadJob
+from app.models import DownloadJob, JobStatus
 from app.schemas import JobCreate, JobRead
-from app.services.files import downloaded_file_path, file_kind, human_size, job_download_root, list_downloaded_files
+from app.services.files import directory_size, downloaded_file_path, file_kind, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
-from app.services.jobs import QueueUnavailableError, create_job, list_jobs, list_jobs_for_chat
-from app.services.logs import read_job_log
+from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job
+from app.services.logs import job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child
 from app.services.session import SessionService
 from app.services.tdl import TdlError, TdlService
@@ -137,6 +138,28 @@ def get_job_or_404(db: Session, job_id: int) -> DownloadJob:
     return job
 
 
+def dashboard_metrics(db: Session) -> dict[str, object]:
+    active_count = db.scalar(select(func.count()).select_from(DownloadJob).where(DownloadJob.status.in_([JobStatus.pending, JobStatus.running]))) or 0
+    failed_count = db.scalar(select(func.count()).select_from(DownloadJob).where(DownloadJob.status == JobStatus.failed)) or 0
+    downloaded_files = db.scalar(select(func.coalesce(func.sum(DownloadJob.total_downloaded_files), 0))) or 0
+    latest_errors = list(
+        db.scalars(
+            select(DownloadJob)
+            .where(DownloadJob.status == JobStatus.failed)
+            .order_by(DownloadJob.finished_at.desc().nullslast(), DownloadJob.created_at.desc())
+            .limit(5)
+        ).all()
+    )
+    disk_bytes = directory_size(settings.downloads_dir)
+    return {
+        "active_jobs": active_count,
+        "failed_jobs": failed_count,
+        "downloaded_files": downloaded_files,
+        "disk_usage": human_size(disk_bytes),
+        "latest_errors": latest_errors,
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -153,7 +176,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"logged_in": SessionService().is_logged_in(), "jobs": jobs},
+        context={"logged_in": SessionService().is_logged_in(), "jobs": jobs, "metrics": dashboard_metrics(db)},
     )
 
 
@@ -424,6 +447,7 @@ def jobs_create_form(
     skip_same: bool = Form(False),
     refresh_export: bool = Form(False),
     output_subfolder: str = Form(...),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     try:
@@ -439,6 +463,27 @@ def jobs_create_form(
             refresh_export=refresh_export,
             output_subfolder=output_subfolder,
         )
+        duplicate_job = find_duplicate_active_job(db, payload)
+        if duplicate_job and not force:
+            return templates.TemplateResponse(
+                request=request,
+                name="jobs.html",
+                context={
+                    "jobs": list_jobs(db),
+                    "error": None,
+                    "duplicate_job": duplicate_job,
+                    "duplicate_payload": payload,
+                    "prefill": {
+                        "chat_id": chat_id,
+                        "chat_title": chat_title or "",
+                        "output_subfolder": output_subfolder,
+                        "export_exists": False,
+                        "export_path": "",
+                        "refresh_export": refresh_export,
+                    },
+                },
+                status_code=409,
+            )
         job = create_job(db, payload)
         return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
     except QueueUnavailableError as exc:
@@ -482,6 +527,12 @@ def jobs_create_form(
 @app.post("/api/jobs", response_model=JobRead)
 def api_create_job(payload: JobCreate, db: Session = Depends(get_db)):
     try:
+        duplicate_job = find_duplicate_active_job(db, payload)
+        if duplicate_job:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Ya existe un job parecido activo: #{duplicate_job.id}",
+            )
         return create_job(db, payload)
     except QueueUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -516,6 +567,11 @@ def api_get_job(job_id: int, db: Session = Depends(get_db)):
     return get_job_or_404(db, job_id)
 
 
+@app.post("/api/jobs/{job_id}/cancel", response_model=JobRead)
+def api_cancel_job(job_id: int, db: Session = Depends(get_db)):
+    return cancel_job(db, get_job_or_404(db, job_id))
+
+
 @app.get("/api/jobs/{job_id}/logs", response_class=PlainTextResponse)
 def api_job_logs(job_id: int, db: Session = Depends(get_db)):
     get_job_or_404(db, job_id)
@@ -532,13 +588,65 @@ def api_job_files(job_id: int, db: Session = Depends(get_db)):
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
 def job_detail(request: Request, job_id: int, db: Session = Depends(get_db)):
     job = get_job_or_404(db, job_id)
-    return templates.TemplateResponse(request=request, name="job_detail.html", context={"job": job})
+    return templates.TemplateResponse(
+        request=request,
+        name="job_detail.html",
+        context={"job": job, "queue_position": queue_position(job)},
+    )
 
 
 @app.get("/jobs/{job_id}/status", response_class=HTMLResponse)
 def job_status_partial(request: Request, job_id: int, db: Session = Depends(get_db)):
     job = get_job_or_404(db, job_id)
-    return templates.TemplateResponse(request=request, name="partials/job_status.html", context={"job": job})
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/job_status.html",
+        context={"job": job, "queue_position": queue_position(job)},
+    )
+
+
+@app.post("/jobs/{job_id}/cancel")
+def job_cancel(job_id: int, db: Session = Depends(get_db)):
+    job = get_job_or_404(db, job_id)
+    cancel_job(db, job)
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
+@app.post("/jobs/{job_id}/retry")
+def job_retry(job_id: int, db: Session = Depends(get_db)):
+    old_job = get_job_or_404(db, job_id)
+    try:
+        new_job = retry_job(db, old_job)
+    except QueueUnavailableError as exc:
+        old_job.error_message = f"{exc}. Instala/inicia Redis y vuelve a intentar."
+        db.commit()
+        return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+    return RedirectResponse(url=f"/jobs/{new_job.id}", status_code=303)
+
+
+@app.post("/jobs/{job_id}/delete")
+def job_delete(
+    job_id: int,
+    delete_logs: bool = Form(False),
+    delete_filtered: bool = Form(False),
+    delete_downloads: bool = Form(False),
+    db: Session = Depends(get_db),
+):
+    job = get_job_or_404(db, job_id)
+    if job.status in {JobStatus.pending, JobStatus.running}:
+        cancel_job(db, job)
+    filtered_path = Path(job.filtered_json_path) if job.filtered_json_path else None
+    log_path = job_log_path(job.id)
+    download_root = job_download_root(job.id, job.download_path)
+    db.delete(job)
+    db.commit()
+    if delete_filtered and filtered_path:
+        filtered_path.unlink(missing_ok=True)
+    if delete_logs:
+        log_path.unlink(missing_ok=True)
+    if delete_downloads and download_root.exists():
+        shutil.rmtree(download_root, ignore_errors=True)
+    return RedirectResponse(url="/jobs", status_code=303)
 
 
 @app.get("/jobs/{job_id}/logs", response_class=HTMLResponse)

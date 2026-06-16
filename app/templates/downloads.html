@@ -14,6 +14,7 @@
       <h2>Descargas</h2>
       <p>{{ files|length }} archivos en <code>{{ download_root }}</code></p>
     </div>
+    <button class="button secondary" type="button" data-copy-text="{{ download_root }}">Copiar ruta</button>
   </div>
 
   {% if files %}
@@ -32,11 +33,19 @@
         <option value="file">Otros</option>
       </select>
     </label>
+    <label>Ordenar
+      <select data-download-sort>
+        <option value="name">Nombre</option>
+        <option value="date-desc">Más recientes</option>
+        <option value="size-desc">Más grandes</option>
+        <option value="size-asc">Más pequeños</option>
+      </select>
+    </label>
   </div>
 
   <div class="download-gallery">
     {% for file in files %}
-    <article class="download-card" data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}">
+    <article class="download-card" data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}" data-size="{{ file.size }}" data-modified="{{ file.modified_at }}">
       <div class="download-preview">
         {% if file.kind == "image" %}
         <img src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" alt="{{ file.name }}" loading="lazy">
@@ -52,7 +61,7 @@
       </div>
       <div class="download-meta">
         <strong title="{{ file.relative_path }}">{{ file.name }}</strong>
-        <span>{{ file.human_size }} · {{ file.kind }}</span>
+        <span>{{ file.human_size }} · {{ file.kind }} · {{ file.modified_label }}</span>
       </div>
       <div class="download-actions">
         {% if file.can_preview %}
@@ -68,13 +77,13 @@
     <thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th></th></tr></thead>
     <tbody>
       {% for file in files %}
-      <tr data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}">
+      <tr data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}" data-size="{{ file.size }}" data-modified="{{ file.modified_at }}">
         <td>
           <strong>{{ file.name }}</strong>
           <small class="muted-line">{{ file.relative_path }}</small>
         </td>
         <td><span class="pill">{{ file.kind }}</span></td>
-        <td>{{ file.human_size }}</td>
+        <td>{{ file.human_size }}<small class="muted-line">{{ file.modified_label }}</small></td>
         <td>
           <div class="table-actions">
             {% if file.can_preview %}

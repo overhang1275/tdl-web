@@ -133,6 +133,7 @@ window.addEventListener("pageshow", () => {
   function applyDownloadFilters() {
     const search = document.querySelector("[data-download-search]");
     const kind = document.querySelector("[data-download-kind]");
+    const sort = document.querySelector("[data-download-sort]");
     const empty = document.querySelector("[data-download-empty]");
     if (!search || !kind) {
       return;
@@ -152,6 +153,41 @@ window.addEventListener("pageshow", () => {
     if (empty) {
       empty.hidden = visibleCards > 0;
     }
+    if (sort) {
+      applyDownloadSort(sort.value);
+    }
+  }
+
+  function sortedDownloadItems(container, selector, sortMode) {
+    return Array.from(container.querySelectorAll(selector)).sort((a, b) => {
+      const nameA = a.dataset.name || "";
+      const nameB = b.dataset.name || "";
+      const sizeA = Number(a.dataset.size || 0);
+      const sizeB = Number(b.dataset.size || 0);
+      const dateA = Number(a.dataset.modified || 0);
+      const dateB = Number(b.dataset.modified || 0);
+      if (sortMode === "size-desc") {
+        return sizeB - sizeA || nameA.localeCompare(nameB);
+      }
+      if (sortMode === "size-asc") {
+        return sizeA - sizeB || nameA.localeCompare(nameB);
+      }
+      if (sortMode === "date-desc") {
+        return dateB - dateA || nameA.localeCompare(nameB);
+      }
+      return nameA.localeCompare(nameB);
+    });
+  }
+
+  function applyDownloadSort(sortMode) {
+    const gallery = document.querySelector(".download-gallery");
+    if (gallery) {
+      sortedDownloadItems(gallery, ".download-card", sortMode).forEach((item) => gallery.appendChild(item));
+    }
+    const tableBody = document.querySelector(".downloads-table tbody");
+    if (tableBody) {
+      sortedDownloadItems(tableBody, "tr", sortMode).forEach((item) => tableBody.appendChild(item));
+    }
   }
 
   window.addEventListener("input", (event) => {
@@ -161,15 +197,43 @@ window.addEventListener("pageshow", () => {
   });
 
   window.addEventListener("change", (event) => {
-    if (event.target instanceof HTMLSelectElement && event.target.matches("[data-download-kind]")) {
+    if (
+      event.target instanceof HTMLSelectElement
+      && (event.target.matches("[data-download-kind]") || event.target.matches("[data-download-sort]"))
+    ) {
       applyDownloadFilters();
     }
   });
 })();
 
+window.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest("[data-copy-text]");
+  if (!(button instanceof HTMLElement)) {
+    return;
+  }
+  const value = button.dataset.copyText || "";
+  if (!value) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    const previous = button.textContent;
+    button.textContent = "Ruta copiada";
+    window.setTimeout(() => {
+      button.textContent = previous;
+    }, 1800);
+  } catch {
+    window.prompt("Copia la ruta:", value);
+  }
+});
+
 (() => {
   const storageKey = "tdl-web-job-statuses";
-  const terminalStatuses = new Set(["completed", "failed"]);
+  const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
 
   function readKnownStatuses() {
     try {
@@ -192,7 +256,8 @@ window.addEventListener("pageshow", () => {
     toast.className = `toast ${job.status === "failed" ? "error" : "ok"}`;
     toast.href = `/jobs/${job.id}`;
     const title = job.chat_title || job.chat_id || `Job #${job.id}`;
-    toast.innerHTML = `<strong>Job #${job.id} ${job.status === "failed" ? "falló" : "terminó"}</strong><span>${title}</span>`;
+    const label = job.status === "failed" ? "falló" : job.status === "cancelled" ? "se canceló" : "terminó";
+    toast.innerHTML = `<strong>Job #${job.id} ${label}</strong><span>${title}</span>`;
     root.appendChild(toast);
     window.setTimeout(() => toast.remove(), 8000);
   }

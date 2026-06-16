@@ -14,6 +14,7 @@ class JobStatus(str, enum.Enum):
     running = "running"
     completed = "completed"
     failed = "failed"
+    cancelled = "cancelled"
 
 
 class JobStage(str, enum.Enum):
@@ -23,6 +24,7 @@ class JobStage(str, enum.Enum):
     downloading = "downloading"
     completed = "completed"
     failed = "failed"
+    cancelled = "cancelled"
 
 
 class MediaType(str, enum.Enum):
@@ -47,6 +49,7 @@ class DownloadJob(Base):
     date_to = mapped_column(Date, nullable=True)
     skip_same: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     refresh_export: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     output_subfolder: Mapped[str] = mapped_column(String(128), nullable=False)
     export_json_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     filtered_json_path: Mapped[str | None] = mapped_column(Text, nullable=True)

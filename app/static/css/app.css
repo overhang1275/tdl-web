@@ -189,6 +189,11 @@ p {
   box-shadow: none;
 }
 
+.button.danger {
+  background: var(--danger);
+  box-shadow: 0 10px 22px rgba(220, 38, 38, 0.18);
+}
+
 .button.small {
   min-height: 32px;
   padding: 7px 12px;
@@ -327,6 +332,11 @@ code {
   background: #fee2e2;
 }
 
+.pill.status-cancelled {
+  color: #475569;
+  background: #e2e8f0;
+}
+
 .muted-line {
   display: block;
   margin-top: 3px;
@@ -372,7 +382,89 @@ code {
 }
 
 .downloads-toolbar {
-  grid-template-columns: minmax(240px, 1fr) 180px;
+  grid-template-columns: minmax(240px, 1fr) 170px 180px;
+}
+
+.page-actions,
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.metric-card {
+  border: 1px solid rgba(216, 227, 238, 0.9);
+  border-radius: 16px;
+  padding: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.metric-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 30px;
+}
+
+.metric-card small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.error-list {
+  display: grid;
+  gap: 10px;
+}
+
+.error-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  color: var(--text);
+  background: #fbfdff;
+}
+
+.error-item span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.cleanup-box {
+  margin-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 14px;
+}
+
+.cleanup-box summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.cleanup-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
 }
 
 .download-gallery {

@@ -17,6 +17,9 @@ class QueueUnavailableError(RuntimeError):
     pass
 
 
+ACTIVE_STATUSES = (JobStatus.pending, JobStatus.running)
+
+
 def get_queue() -> Queue:
     return Queue("telegram-downloads", connection=Redis.from_url(settings.redis_url))
 
@@ -68,6 +71,70 @@ def create_job(db: Session, payload: JobCreate, enqueue: bool = True) -> Downloa
         db.commit()
         db.refresh(job)
     return job
+
+
+def find_duplicate_active_job(db: Session, payload: JobCreate) -> DownloadJob | None:
+    return db.scalar(
+        select(DownloadJob)
+        .where(
+            DownloadJob.status.in_(ACTIVE_STATUSES),
+            DownloadJob.chat_id == payload.chat_id,
+            DownloadJob.hashtag == payload.hashtag,
+            DownloadJob.media_type == MediaType(payload.media_type),
+            DownloadJob.search_text == payload.search_text,
+            DownloadJob.date_from == payload.date_from,
+            DownloadJob.date_to == payload.date_to,
+            DownloadJob.output_subfolder == payload.output_subfolder,
+        )
+        .order_by(DownloadJob.created_at.desc())
+    )
+
+
+def cancel_job(db: Session, job: DownloadJob) -> DownloadJob:
+    if job.status not in ACTIVE_STATUSES:
+        return job
+    job.cancel_requested = True
+    if job.status == JobStatus.pending:
+        job.status = JobStatus.cancelled
+        job.stage = JobStage.cancelled
+    db.commit()
+    if job.rq_job_id:
+        try:
+            rq_job = Job.fetch(job.rq_job_id, connection=get_queue().connection)
+            rq_job.cancel()
+        except Exception:
+            pass
+    db.refresh(job)
+    return job
+
+
+def retry_job(db: Session, job: DownloadJob) -> DownloadJob:
+    payload = JobCreate(
+        chat_id=job.chat_id,
+        chat_title=job.chat_title,
+        hashtag=job.hashtag,
+        media_type=job.media_type.value,
+        search_text=job.search_text,
+        date_from=job.date_from,
+        date_to=job.date_to,
+        skip_same=job.skip_same,
+        refresh_export=job.refresh_export,
+        output_subfolder=job.output_subfolder,
+    )
+    return create_job(db, payload)
+
+
+def queue_position(job: DownloadJob) -> int | None:
+    if job.status != JobStatus.pending or not job.rq_job_id:
+        return None
+    try:
+        job_ids = get_queue().job_ids
+    except Exception:
+        return None
+    try:
+        return list(job_ids).index(job.rq_job_id) + 1
+    except ValueError:
+        return None
 
 
 def list_jobs(db: Session) -> list[DownloadJob]:

@@ -8,6 +8,32 @@
 </section>
 
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if duplicate_job %}
+<section class="panel duplicate-panel">
+  <h2>Ya hay un job parecido corriendo</h2>
+  <p>
+    Encontré el job #{{ duplicate_job.id }} para este mismo chat, filtros y carpeta.
+    Puedes abrir ese job o crear otro de todos modos.
+  </p>
+  <div class="job-actions">
+    <a class="button secondary" href="/jobs/{{ duplicate_job.id }}">Abrir job existente</a>
+    <form method="post" action="/jobs" data-disable-on-submit>
+      <input type="hidden" name="chat_id" value="{{ duplicate_payload.chat_id }}">
+      <input type="hidden" name="chat_title" value="{{ duplicate_payload.chat_title or '' }}">
+      <input type="hidden" name="hashtag" value="{{ duplicate_payload.hashtag or '' }}">
+      <input type="hidden" name="media_type" value="{{ duplicate_payload.media_type }}">
+      <input type="hidden" name="search_text" value="{{ duplicate_payload.search_text or '' }}">
+      <input type="hidden" name="date_from" value="{{ duplicate_payload.date_from or '' }}">
+      <input type="hidden" name="date_to" value="{{ duplicate_payload.date_to or '' }}">
+      <input type="hidden" name="skip_same" value="{{ 'true' if duplicate_payload.skip_same else 'false' }}">
+      <input type="hidden" name="refresh_export" value="{{ 'true' if duplicate_payload.refresh_export else 'false' }}">
+      <input type="hidden" name="output_subfolder" value="{{ duplicate_payload.output_subfolder }}">
+      <input type="hidden" name="force" value="true">
+      <button class="button" type="submit">Crear otro</button>
+    </form>
+  </div>
+</section>
+{% endif %}
 
 <section class="panel">
   <div class="section-title">
