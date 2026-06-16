@@ -66,6 +66,10 @@ class JobRead(BaseModel):
     status: str
     total_filtered_messages: int
     total_downloaded_files: int
+    download_observed_files: int
+    download_observed_bytes: int
+    download_speed_bps: int
+    download_eta_seconds: int | None
     error_message: str | None
     created_at: datetime
     started_at: datetime | None

@@ -5,67 +5,95 @@
     <h1>Archivos job #{{ job.id }}</h1>
     <p>{{ job.chat_title or job.chat_id }}</p>
   </div>
-  <a class="button secondary" href="/jobs/{{ job.id }}">Volver</a>
+  <div class="page-actions">
+    <button class="button secondary" type="button" data-copy-text="{{ download_root }}">Copiar ruta</button>
+    <a class="button secondary" href="/jobs/{{ job.id }}">Volver</a>
+  </div>
 </section>
 
 <section class="panel">
   <div class="section-title">
     <div>
-      <h2>Descargas</h2>
-      <p>{{ files|length }} archivos en <code>{{ download_root }}</code></p>
+      <h2>Galería</h2>
+      <p>{{ pagination.total }} de {{ all_files_count }} archivos en <code>{{ download_root }}</code></p>
     </div>
-    <button class="button secondary" type="button" data-copy-text="{{ download_root }}">Copiar ruta</button>
   </div>
 
-  {% if files %}
-  <div class="list-toolbar downloads-toolbar">
+  <form method="get" action="/downloads/{{ job.id }}" class="list-toolbar downloads-toolbar">
     <label>Buscar
-      <input type="search" data-download-search placeholder="Nombre o carpeta">
+      <input type="search" name="q" placeholder="Nombre o carpeta" value="{{ pagination.q }}">
     </label>
     <label>Tipo
-      <select data-download-kind>
-        <option value="">Todos</option>
-        <option value="image">Imágenes</option>
-        <option value="video">Videos</option>
-        <option value="audio">Audio</option>
-        <option value="pdf">PDF</option>
-        <option value="text">Texto</option>
-        <option value="file">Otros</option>
+      <select name="kind">
+        <option value="" {% if pagination.kind == "" %}selected{% endif %}>Todos</option>
+        <option value="image" {% if pagination.kind == "image" %}selected{% endif %}>Imágenes</option>
+        <option value="video" {% if pagination.kind == "video" %}selected{% endif %}>Videos</option>
+        <option value="audio" {% if pagination.kind == "audio" %}selected{% endif %}>Audio</option>
+        <option value="pdf" {% if pagination.kind == "pdf" %}selected{% endif %}>PDF</option>
+        <option value="text" {% if pagination.kind == "text" %}selected{% endif %}>Texto</option>
+        <option value="file" {% if pagination.kind == "file" %}selected{% endif %}>Otros</option>
       </select>
     </label>
     <label>Ordenar
-      <select data-download-sort>
-        <option value="name">Nombre</option>
-        <option value="date-desc">Más recientes</option>
-        <option value="size-desc">Más grandes</option>
-        <option value="size-asc">Más pequeños</option>
+      <select name="sort">
+        <option value="name" {% if pagination.sort == "name" %}selected{% endif %}>Nombre</option>
+        <option value="date-desc" {% if pagination.sort == "date-desc" %}selected{% endif %}>Más recientes</option>
+        <option value="size-desc" {% if pagination.sort == "size-desc" %}selected{% endif %}>Más grandes</option>
+        <option value="size-asc" {% if pagination.sort == "size-asc" %}selected{% endif %}>Más pequeños</option>
       </select>
     </label>
+    <label>Por página
+      <select name="per_page">
+        {% for option in pagination.per_page_options %}
+        <option value="{{ option }}" {% if pagination.per_page == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="button" type="submit">Aplicar</button>
+  </form>
+
+  {% if files %}
+  <div class="pagination gallery-pagination">
+    <span class="pagination-summary">
+      Mostrando {{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }}
+    </span>
+    <div class="pagination-actions">
+      {% if pagination.has_prev %}
+      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</a>
+      {% endif %}
+      <span class="pill">Página {{ pagination.page }} / {{ pagination.page_count }}</span>
+      {% if pagination.has_next %}
+      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</a>
+      {% endif %}
+    </div>
   </div>
 
   <div class="download-gallery">
     {% for file in files %}
-    <article class="download-card" data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}" data-size="{{ file.size }}" data-modified="{{ file.modified_at }}">
+    <article class="download-card">
       <div class="download-preview">
         {% if file.kind == "image" %}
-        <img src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" alt="{{ file.name }}" loading="lazy">
+        <a href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}" aria-label="Ver {{ file.name }}">
+          <img src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" alt="{{ file.name }}" loading="lazy">
+        </a>
         {% elif file.kind == "video" %}
-        <div class="file-icon">video</div>
+        <video src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" controls preload="metadata" playsinline></video>
         {% elif file.kind == "audio" %}
-        <div class="file-icon">audio</div>
+        <audio src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" controls preload="metadata"></audio>
         {% elif file.kind == "pdf" %}
-        <div class="file-icon">pdf</div>
+        <a class="file-icon" href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}">pdf</a>
         {% else %}
-        <div class="file-icon">{{ file.kind }}</div>
+        <a class="file-icon" href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}">{{ file.kind }}</a>
         {% endif %}
       </div>
       <div class="download-meta">
         <strong title="{{ file.relative_path }}">{{ file.name }}</strong>
         <span>{{ file.human_size }} · {{ file.kind }} · {{ file.modified_label }}</span>
+        <small class="muted-line" title="{{ file.relative_path }}">{{ file.relative_path }}</small>
       </div>
       <div class="download-actions">
         {% if file.can_preview %}
-        <a class="button small secondary" href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}">Ver</a>
+        <a class="button small secondary" href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}">Preview</a>
         {% endif %}
         <a class="button small" href="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}&download=true">Descargar</a>
       </div>
@@ -73,37 +101,29 @@
     {% endfor %}
   </div>
 
-  <table class="downloads-table">
-    <thead><tr><th>Archivo</th><th>Tipo</th><th>Tamaño</th><th></th></tr></thead>
-    <tbody>
-      {% for file in files %}
-      <tr data-download-item data-name="{{ file.relative_path|lower }}" data-kind="{{ file.kind }}" data-size="{{ file.size }}" data-modified="{{ file.modified_at }}">
-        <td>
-          <strong>{{ file.name }}</strong>
-          <small class="muted-line">{{ file.relative_path }}</small>
-        </td>
-        <td><span class="pill">{{ file.kind }}</span></td>
-        <td>{{ file.human_size }}<small class="muted-line">{{ file.modified_label }}</small></td>
-        <td>
-          <div class="table-actions">
-            {% if file.can_preview %}
-            <a class="button small secondary" href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}">Ver</a>
-            {% endif %}
-            <a class="button small" href="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}&download=true">Descargar</a>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <div class="empty-state" data-download-empty hidden>
-    <strong>No hay coincidencias.</strong>
-    <p>Cambia la búsqueda o el filtro de tipo.</p>
+  <div class="pagination gallery-pagination">
+    <span class="pagination-summary">
+      Mostrando {{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }}
+    </span>
+    <div class="pagination-actions">
+      {% if pagination.has_prev %}
+      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</a>
+      {% endif %}
+      <span class="pill">Página {{ pagination.page }} / {{ pagination.page_count }}</span>
+      {% if pagination.has_next %}
+      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</a>
+      {% endif %}
+    </div>
   </div>
   {% else %}
   <div class="empty-state">
+    {% if all_files_count %}
+    <strong>No hay coincidencias.</strong>
+    <p>Cambia la búsqueda o el filtro de tipo.</p>
+    {% else %}
     <strong>No hay archivos descargados todavía.</strong>
     <p>Cuando el job descargue contenido, aparecerá aquí.</p>
+    {% endif %}
   </div>
   {% endif %}
 </section>

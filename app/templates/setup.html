@@ -67,4 +67,27 @@
   <pre><code>{{ tdl_login_command }}</code></pre>
   <p>Después regresa a esta página y refresca. La sesión se conserva en el storage mostrado arriba.</p>
 </section>
+
+<section class="panel danger-zone">
+  <div class="section-title">
+    <div>
+      <h2>Reinicializar todo</h2>
+      <p>Borra jobs, cola, exports, filtered-job, logs y descargas para empezar desde cero.</p>
+    </div>
+  </div>
+  <form method="post" action="/setup/reset" class="reset-form">
+    <label class="check wide">
+      <input name="keep_session" type="checkbox" checked>
+      Conservar sesión de Telegram/tdl
+    </label>
+    <label class="wide">
+      Confirmación
+      <input name="confirmation" placeholder="Escribe REINICIAR">
+    </label>
+    {% if reset_error %}
+    <div class="notice error wide">La confirmación debe ser exactamente <code>REINICIAR</code>.</div>
+    {% endif %}
+    <button class="button danger" type="submit">Reinicializar a cero</button>
+  </form>
+</section>
 {% endblock %}

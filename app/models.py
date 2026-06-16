@@ -57,8 +57,30 @@ class DownloadJob(Base):
     stage: Mapped[JobStage] = mapped_column(Enum(JobStage), default=JobStage.pending, nullable=False)
     total_filtered_messages: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_downloaded_files: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    download_observed_files: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    download_observed_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    download_speed_bps: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    download_eta_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.pending, nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DownloadTemplate(Base):
+    __tablename__ = "download_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    chat_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hashtag: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    media_type: Mapped[MediaType] = mapped_column(Enum(MediaType), default=MediaType.all, nullable=False)
+    search_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    date_from = mapped_column(Date, nullable=True)
+    date_to = mapped_column(Date, nullable=True)
+    skip_same: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    refresh_export: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    output_subfolder: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

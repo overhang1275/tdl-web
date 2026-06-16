@@ -3,8 +3,18 @@
     <h2>Chats</h2>
     {% if not error %}
     <p>{{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }} chats{% if pagination.q %} para "{{ pagination.q }}"{% endif %}</p>
+    {% elif has_cache %}
+    <p>Mostrando cache local mientras se resuelve el error de actualización.</p>
+    {% endif %}
+    {% if cached_at %}
+    <small class="muted-line">
+      Cache actualizado: {{ cached_at.strftime("%Y-%m-%d %H:%M") }}{% if refreshed %} · recién actualizado desde tdl{% endif %}
+    </small>
+    {% else %}
+    <small class="muted-line">Sin cache local todavía. Usa “Actualizar chats”.</small>
     {% endif %}
   </div>
+  <button class="button secondary" type="button" data-chats-url="/chats/list?refresh=true&q={{ pagination.q | urlencode }}&per_page={{ pagination.per_page }}&page=1">Actualizar cache</button>
 </div>
 
 <form class="list-toolbar">
@@ -29,7 +39,8 @@
 
 {% if error %}
 <div class="notice error">{{ error }}</div>
-{% elif chats %}
+{% endif %}
+{% if chats %}
 <table>
   <thead><tr><th>ID</th><th>Nombre</th><th>Username</th><th>Tipo</th><th>Topics</th><th></th></tr></thead>
   <tbody>
@@ -67,7 +78,7 @@
 </div>
 {% else %}
 <div class="empty-state">
-  <strong>No se encontraron chats.</strong>
-  <p>Prueba con otro nombre, username o ID.</p>
+  <strong>{% if has_cache %}No se encontraron chats.{% else %}No hay cache de chats todavía.{% endif %}</strong>
+  <p>{% if has_cache %}Prueba con otro nombre, username o ID.{% else %}Presiona “Actualizar cache” para leerlos una vez desde tdl.{% endif %}</p>
 </div>
 {% endif %}

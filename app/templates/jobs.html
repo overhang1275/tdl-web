@@ -8,6 +8,7 @@
 </section>
 
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if template_error %}<div class="notice error">{{ template_error }}</div>{% endif %}
 {% if duplicate_job %}
 <section class="panel duplicate-panel">
   <h2>Ya hay un job parecido corriendo</h2>
@@ -38,6 +39,71 @@
 <section class="panel">
   <div class="section-title">
     <div>
+      <h2>Plantillas</h2>
+      <p>Guarda filtros frecuentes y aplícalos sin volver a llenar todo.</p>
+    </div>
+  </div>
+
+  {% if templates %}
+  <div class="template-grid">
+    {% for template in templates %}
+    <article class="template-card {% if selected_template and selected_template.id == template.id %}active{% endif %}">
+      <div>
+        <strong>{{ template.name }}</strong>
+        <span>{{ template.media_type.value }}{% if template.chat_title or template.chat_id %} · {{ template.chat_title or template.chat_id }}{% endif %}</span>
+        <small>
+          {% if template.hashtag %}{{ template.hashtag }} · {% endif %}
+          {% if template.search_text %}{{ template.search_text }} · {% endif %}
+          {% if template.date_from %}desde {{ template.date_from }} · {% endif %}
+          {% if template.output_subfolder %}{{ template.output_subfolder }}{% endif %}
+        </small>
+      </div>
+      <div class="template-actions">
+        <a class="button small secondary" href="/jobs?template_id={{ template.id }}">Aplicar</a>
+        <form method="post" action="/templates/{{ template.id }}/delete">
+          <button class="button small danger" type="submit">Borrar</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state compact">
+    <strong>No hay plantillas todavía.</strong>
+    <p>Crea una para videos, PDFs, fechas o chats que repites mucho.</p>
+  </div>
+  {% endif %}
+
+  <details class="template-create">
+    <summary>Crear plantilla</summary>
+    <form method="post" action="/templates" class="grid-form">
+      <label>Nombre <input name="name" required placeholder="Videos de este chat"></label>
+      <label>Chat ID <input name="chat_id" placeholder="Opcional" value="{{ prefill.chat_id or '' }}"></label>
+      <label>Título <input name="chat_title" placeholder="Opcional" value="{{ prefill.chat_title or '' }}"></label>
+      <label>Hashtag <input name="hashtag" placeholder="#tag" value="{{ prefill.hashtag or '' }}"></label>
+      <label>Tipo
+        <select name="media_type">
+          <option value="all" {% if prefill.media_type == "all" %}selected{% endif %}>all</option>
+          <option value="video" {% if prefill.media_type == "video" %}selected{% endif %}>video</option>
+          <option value="image" {% if prefill.media_type == "image" %}selected{% endif %}>image</option>
+          <option value="audio" {% if prefill.media_type == "audio" %}selected{% endif %}>audio</option>
+          <option value="document" {% if prefill.media_type == "document" %}selected{% endif %}>document</option>
+        </select>
+      </label>
+      <label>Texto <input name="search_text" placeholder="Búsqueda opcional" value="{{ prefill.search_text or '' }}"></label>
+      <label>Desde <input name="date_from" type="date" value="{{ prefill.date_from or '' }}"></label>
+      <label>Hasta <input name="date_to" type="date" value="{{ prefill.date_to or '' }}"></label>
+      <label>Subcarpeta <input name="output_subfolder" placeholder="Opcional" value="{{ prefill.output_subfolder or '' }}"></label>
+      <label class="check"><input name="skip_same" type="checkbox" {% if prefill.skip_same %}checked{% endif %}> Skip same</label>
+      <label class="check"><input name="refresh_export" type="checkbox" {% if prefill.refresh_export %}checked{% endif %}> Actualizar export</label>
+      <button class="button" type="submit">Guardar plantilla</button>
+    </form>
+  </details>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
       <h2>Nueva descarga</h2>
       <p>Filtra el export y descarga solo el contenido que necesitas.</p>
     </div>
@@ -45,21 +111,21 @@
   <form method="post" action="/jobs" class="grid-form" data-disable-on-submit>
     <label>Chat ID <input name="chat_id" required placeholder="-1001234567890 o @canal" value="{{ prefill.chat_id or '' }}"></label>
     <label>Título <input name="chat_title" placeholder="Opcional" value="{{ prefill.chat_title or '' }}"></label>
-    <label>Hashtag <input name="hashtag" placeholder="#tag"></label>
+    <label>Hashtag <input name="hashtag" placeholder="#tag" value="{{ prefill.hashtag or '' }}"></label>
     <label>Tipo
       <select name="media_type">
-        <option value="all">all</option>
-        <option value="video">video</option>
-        <option value="image">image</option>
-        <option value="audio">audio</option>
-        <option value="document">document</option>
+        <option value="all" {% if prefill.media_type == "all" %}selected{% endif %}>all</option>
+        <option value="video" {% if prefill.media_type == "video" %}selected{% endif %}>video</option>
+        <option value="image" {% if prefill.media_type == "image" %}selected{% endif %}>image</option>
+        <option value="audio" {% if prefill.media_type == "audio" %}selected{% endif %}>audio</option>
+        <option value="document" {% if prefill.media_type == "document" %}selected{% endif %}>document</option>
       </select>
     </label>
-    <label>Texto <input name="search_text" placeholder="Búsqueda opcional"></label>
-    <label>Desde <input name="date_from" type="date"></label>
-    <label>Hasta <input name="date_to" type="date"></label>
+    <label>Texto <input name="search_text" placeholder="Búsqueda opcional" value="{{ prefill.search_text or '' }}"></label>
+    <label>Desde <input name="date_from" type="date" value="{{ prefill.date_from or '' }}"></label>
+    <label>Hasta <input name="date_to" type="date" value="{{ prefill.date_to or '' }}"></label>
     <label>Subcarpeta <input name="output_subfolder" required value="{{ prefill.output_subfolder or 'download' }}"></label>
-    <label class="check"><input name="skip_same" type="checkbox" checked> Skip same</label>
+    <label class="check"><input name="skip_same" type="checkbox" {% if prefill.skip_same %}checked{% endif %}> Skip same</label>
     {% if prefill.export_exists %}
     <label class="check wide">
       <input name="refresh_export" type="checkbox" {% if prefill.refresh_export %}checked{% endif %}>

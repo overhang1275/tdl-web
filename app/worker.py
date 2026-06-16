@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+import time
 
 from app.database import SessionLocal, engine, init_db
 from app.models import DownloadJob, JobStage, JobStatus
 from app.services.download import DownloadService
 from app.services.export import ExportService
-from app.services.files import count_downloaded_files
+from app.services.files import scan_download_progress
 from app.services.filtering import filter_export
 from app.services.logs import append_job_log
 from app.services.tdl import TdlCancelled
@@ -77,19 +78,56 @@ def run_download_job(job_id: int) -> None:
 
         raise_if_cancelled()
         job.stage = JobStage.downloading
+        job.download_observed_files = 0
+        job.download_observed_bytes = 0
+        job.download_speed_bps = 0
+        job.download_eta_seconds = None
         db.commit()
         append_job_log(job.id, "Starting media download")
+        download_started_at = time.monotonic()
+        last_progress_at = 0.0
+
+        def track_download_progress(force: bool = False) -> None:
+            nonlocal last_progress_at
+            now = time.monotonic()
+            if not force and now - last_progress_at < 3:
+                return
+            last_progress_at = now
+            files, bytes_total = scan_download_progress(Path(job.download_path))
+            elapsed = max(1, int(now - download_started_at))
+            speed = int(bytes_total / elapsed)
+            eta = None
+            if job.total_filtered_messages > 0 and files > 0:
+                remaining = max(job.total_filtered_messages - files, 0)
+                eta = int((elapsed / files) * remaining)
+            current = db.get(DownloadJob, job_id)
+            if current is not None:
+                current.download_observed_files = files
+                current.download_observed_bytes = bytes_total
+                current.download_speed_bps = speed
+                current.download_eta_seconds = eta
+                current.total_downloaded_files = files
+                db.commit()
+
+        def cancel_or_track_download() -> bool:
+            cancelled = ensure_not_cancelled()
+            if not cancelled:
+                track_download_progress()
+            return cancelled
+
         download_service.download_from_file(
             Path(job.filtered_json_path),
             Path(job.download_path),
             skip_same=job.skip_same,
-            should_cancel=ensure_not_cancelled,
+            should_cancel=cancel_or_track_download,
         )
 
         raise_if_cancelled()
-        job.total_downloaded_files = count_downloaded_files(Path(job.download_path))
+        track_download_progress(force=True)
+        db.refresh(job)
         job.stage = JobStage.completed
         job.status = JobStatus.completed
+        job.download_eta_seconds = 0
         job.finished_at = datetime.utcnow()
         db.commit()
         append_job_log(job.id, f"Completed. Files on disk: {job.total_downloaded_files}")

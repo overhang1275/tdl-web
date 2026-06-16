@@ -1,11 +1,31 @@
 <h2>Progreso</h2>
+{% set found_count = job.total_filtered_messages %}
+{% set downloaded_count = job.download_observed_files or job.total_downloaded_files %}
+{% set progress_percent = ((downloaded_count / found_count) * 100) if found_count else 0 %}
+{% if progress_percent > 100 %}{% set progress_percent = 100 %}{% endif %}
+<div class="progress-block">
+  <div class="progress-row">
+    <span>Progreso aproximado</span>
+    <strong>{{ "%.0f"|format(progress_percent) }}%</strong>
+  </div>
+  <div class="progress-bar" aria-label="Progreso aproximado">
+    <div class="progress-fill" style="width: {{ progress_percent }}%"></div>
+  </div>
+  <div class="progress-meta">
+    <span>{{ downloaded_count }} de {{ found_count }} encontrados</span>
+    <span>{{ human_size(job.download_observed_bytes) }} descargados</span>
+  </div>
+</div>
 <div class="status-grid">
   <div><span>Stage</span><strong>{{ job.stage.value }}</strong></div>
   <div><span>Status</span><strong>{{ job.status.value }}</strong></div>
   <div><span>Cola</span><strong>{% if queue_position %}#{{ queue_position }}{% elif job.status.value == "pending" %}pendiente{% else %}-{% endif %}</strong></div>
   <div><span>Export</span><strong>{{ "actualiza" if job.refresh_export else "reutiliza" }}</strong></div>
-  <div><span>Mensajes</span><strong>{{ job.total_filtered_messages }}</strong></div>
-  <div><span>Archivos</span><strong>{{ job.total_downloaded_files }}</strong></div>
+  <div><span>Archivos encontrados</span><strong>{{ found_count }}</strong></div>
+  <div><span>Archivos descargados</span><strong>{{ downloaded_count }}</strong></div>
+  <div><span>Tamaño</span><strong>{{ human_size(job.download_observed_bytes) }}</strong></div>
+  <div><span>Velocidad</span><strong>{{ human_size(job.download_speed_bps) }}/s</strong></div>
+  <div><span>ETA</span><strong>{{ human_duration(job.download_eta_seconds) }}</strong></div>
 </div>
 {% if queue_position and queue_position > 1 %}
 <div class="notice">Pendiente, {{ queue_position - 1 }} jobs antes que este.</div>

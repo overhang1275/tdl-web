@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from app.main import app, health
-from app.main import paginate_chats
+from app.main import apply_template_prefill, paginate_chats, paginate_downloads
+from app.models import DownloadTemplate, MediaType
+from app.services import chat_cache
 
 
 def test_health_endpoint():
@@ -19,3 +21,62 @@ def test_paginate_chats_filters_by_id_and_username():
 
     assert page["total"] == 1
     assert page["items"][0]["id"] == "200"
+
+
+def test_paginate_downloads_filters_sorts_and_pages():
+    files = [
+        {"relative_path": "b/video.mp4", "kind": "video", "size": 300, "modified_at": 2},
+        {"relative_path": "a/photo.jpg", "kind": "image", "size": 100, "modified_at": 3},
+        {"relative_path": "c/video-small.mp4", "kind": "video", "size": 50, "modified_at": 1},
+    ]
+
+    page = paginate_downloads(files, q="video", kind="video", sort="size-desc", page=1, per_page=12)
+
+    assert page["total"] == 2
+    assert [item["relative_path"] for item in page["items"]] == ["b/video.mp4", "c/video-small.mp4"]
+    assert page["page_count"] == 1
+
+
+def test_apply_template_prefill_overrides_defined_values_only():
+    prefill = {
+        "chat_id": "100",
+        "chat_title": "Original",
+        "hashtag": "",
+        "media_type": "all",
+        "search_text": "",
+        "date_from": "",
+        "date_to": "",
+        "skip_same": True,
+        "output_subfolder": "download",
+        "export_exists": False,
+        "export_path": "",
+        "refresh_export": False,
+        "template_id": "",
+    }
+    template = DownloadTemplate(
+        id=7,
+        name="Videos",
+        media_type=MediaType.video,
+        output_subfolder="videos",
+        skip_same=False,
+        refresh_export=True,
+    )
+
+    result = apply_template_prefill(prefill, template)
+
+    assert result["chat_id"] == "100"
+    assert result["media_type"] == "video"
+    assert result["output_subfolder"] == "videos"
+    assert result["skip_same"] is False
+    assert result["template_id"] == 7
+
+
+def test_chats_cache_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(chat_cache.settings, "base_dir", tmp_path)
+    chats = [{"id": "100", "title": "General"}]
+
+    updated_at = chat_cache.write_chats_cache(chats)
+    cached_chats, cached_at = chat_cache.read_chats_cache()
+
+    assert cached_chats == chats
+    assert cached_at == updated_at

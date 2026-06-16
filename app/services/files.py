@@ -17,6 +17,18 @@ def human_size(size: int) -> str:
     return f"{size} B"
 
 
+def human_duration(seconds: int | None) -> str:
+    if seconds is None or seconds < 0:
+        return "-"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, remaining_seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {remaining_seconds}s"
+    hours, remaining_minutes = divmod(minutes, 60)
+    return f"{hours}h {remaining_minutes}m"
+
+
 def file_kind(path: Path) -> str:
     media_type, _ = mimetypes.guess_type(path.name)
     if not media_type:
@@ -78,6 +90,21 @@ def count_downloaded_files(path: Path) -> int:
     if not path.exists():
         return 0
     return sum(1 for item in path.rglob("*") if item.is_file())
+
+
+def scan_download_progress(path: Path) -> tuple[int, int]:
+    if not path.exists():
+        return 0, 0
+    files = 0
+    total = 0
+    for item in path.rglob("*"):
+        if item.is_file():
+            try:
+                files += 1
+                total += item.stat().st_size
+            except OSError:
+                continue
+    return files, total
 
 
 def directory_size(path: Path) -> int:
