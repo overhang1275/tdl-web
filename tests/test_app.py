@@ -3,7 +3,9 @@ from __future__ import annotations
 from app.main import app, health
 from app.main import apply_template_prefill, paginate_chats, paginate_downloads
 from app.models import DownloadTemplate, MediaType
+from app.services.errors import friendly_error
 from app.services import chat_cache
+from app.services.search import global_search
 
 
 def test_health_endpoint():
@@ -80,3 +82,13 @@ def test_chats_cache_roundtrip(tmp_path, monkeypatch):
 
     assert cached_chats == chats
     assert cached_at == updated_at
+
+
+def test_friendly_error_detects_common_cases():
+    assert friendly_error("Error 61 connecting to 127.0.0.1:6379")["title"] == "Redis apagado o inaccesible"
+    assert friendly_error("Filtered messages: 0")["title"] == "No hay mensajes con esos filtros"
+    assert friendly_error("json decode error")["title"] == "Export corrupto o inválido"
+
+
+def test_global_search_empty_query_returns_empty_groups():
+    assert global_search(None, "   ") == {"chats": [], "jobs": [], "files": []}

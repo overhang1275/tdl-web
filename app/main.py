@@ -22,12 +22,14 @@ from app.database import get_db, init_db
 from app.models import DownloadJob, DownloadTemplate, JobStatus, MediaType
 from app.schemas import JobCreate, JobRead
 from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, read_chats_cache, refresh_chats_cache
+from app.services.errors import friendly_error
 from app.services.files import directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
 from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job
 from app.services.logs import job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child, sanitize_subfolder
 from app.services.session import SessionService
+from app.services.search import global_search
 from app.services.tdl import TdlError, TdlService
 
 
@@ -42,6 +44,7 @@ templates = Jinja2Templates(directory="app/templates")
 templates.env.cache = None
 templates.env.globals["human_size"] = human_size
 templates.env.globals["human_duration"] = human_duration
+templates.env.globals["friendly_error"] = friendly_error
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
@@ -283,6 +286,16 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         request=request,
         name="dashboard.html",
         context={"logged_in": SessionService().is_logged_in(), "jobs": jobs, "metrics": dashboard_metrics(db)},
+    )
+
+
+@app.get("/search", response_class=HTMLResponse)
+def search_page(request: Request, q: str = "", db: Session = Depends(get_db)):
+    query = q.strip()
+    return templates.TemplateResponse(
+        request=request,
+        name="search.html",
+        context={"q": query, "results": global_search(db, query)},
     )
 
 

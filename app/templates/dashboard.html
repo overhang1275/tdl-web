@@ -41,9 +41,10 @@
   </div>
   <div class="error-list">
     {% for job in metrics.latest_errors %}
+    {% set error_info = friendly_error(job.error_message) %}
     <a href="/jobs/{{ job.id }}" class="error-item">
       <strong>#{{ job.id }} · {{ job.chat_title or job.chat_id }}</strong>
-      <span>{{ job.error_message or "Sin detalle" }}</span>
+      <span>{{ error_info.title }} · {{ error_info.detail }}</span>
     </a>
     {% endfor %}
   </div>

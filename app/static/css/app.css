@@ -102,6 +102,16 @@ a { color: var(--accent); text-decoration: none; }
   background: var(--accent-soft);
 }
 
+.global-search {
+  margin-top: 18px;
+}
+
+.global-search input {
+  min-height: 38px;
+  border-radius: 999px;
+  background: #f7fbff;
+}
+
 .shell {
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -472,6 +482,40 @@ code {
 
 .error-item span {
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.search-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.result-list {
+  display: grid;
+  gap: 10px;
+}
+
+.result-item {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  color: var(--text);
+  background: #fbfdff;
+}
+
+.result-item span {
+  color: var(--muted);
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 

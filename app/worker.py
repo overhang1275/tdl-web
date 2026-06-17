@@ -7,6 +7,7 @@ import time
 from app.database import SessionLocal, engine, init_db
 from app.models import DownloadJob, JobStage, JobStatus
 from app.services.download import DownloadService
+from app.services.errors import friendly_error
 from app.services.export import ExportService
 from app.services.files import scan_download_progress
 from app.services.filtering import filter_export
@@ -75,6 +76,8 @@ def run_download_job(job_id: int) -> None:
         job.total_filtered_messages = total
         db.commit()
         append_job_log(job.id, f"Filtered messages: {total}")
+        if total == 0:
+            raise ValueError("Filtered messages: 0")
 
         raise_if_cancelled()
         job.stage = JobStage.downloading
@@ -150,7 +153,10 @@ def run_download_job(job_id: int) -> None:
             job.error_message = str(exc)
             job.finished_at = datetime.utcnow()
             db.commit()
-            append_job_log(job.id, f"Failed: {exc}")
+            friendly = friendly_error(str(exc))
+            append_job_log(job.id, f"Failed: {friendly['title'] if friendly else exc}")
+            if friendly:
+                append_job_log(job.id, friendly["detail"])
         raise
     finally:
         db.close()

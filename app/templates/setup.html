@@ -20,7 +20,7 @@
     <div class="health-card {{ 'ok' if status.session_active else 'bad' }}">
       <span>Sesión</span>
       <strong>{{ "activa" if status.session_active else "no detectada" }}</strong>
-      {% if status.session_error %}<small>{{ status.session_error }}</small>{% endif %}
+      {% if status.session_error %}{% set error_info = friendly_error(status.session_error) %}<small>{{ error_info.title }} · {{ error_info.detail }}</small>{% endif %}
     </div>
     <div class="health-card {{ 'ok' if status.tdl_installed else 'bad' }}">
       <span>tdl</span>
@@ -31,6 +31,7 @@
       <span>Redis</span>
       <strong>{{ "conectado" if status.redis_connected else "sin conexión" }}</strong>
       <small>{{ status.redis_url }}</small>
+      {% if status.redis_error %}{% set error_info = friendly_error(status.redis_error) %}<small>{{ error_info.detail }}</small>{% endif %}
     </div>
     <div class="health-card {{ 'ok' if status.worker_connected else 'warn' }}">
       <span>Worker</span>
@@ -40,7 +41,7 @@
     <div class="health-card {{ 'bad' if status.last_login_error else 'ok' }}">
       <span>Último login</span>
       <strong>{{ "sin errores" if not status.last_login_error else "con error" }}</strong>
-      {% if status.last_login_error %}<small>{{ status.last_login_error }}</small>{% endif %}
+      {% if status.last_login_error %}{% set error_info = friendly_error(status.last_login_error) %}<small>{{ error_info.title }} · {{ error_info.detail }}</small>{% endif %}
     </div>
     <div class="health-card">
       <span>Storage</span>

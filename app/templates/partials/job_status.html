@@ -30,4 +30,14 @@
 {% if queue_position and queue_position > 1 %}
 <div class="notice">Pendiente, {{ queue_position - 1 }} jobs antes que este.</div>
 {% endif %}
-{% if job.error_message %}<div class="notice error">{{ job.error_message }}</div>{% endif %}
+{% if job.error_message %}
+{% set error_info = friendly_error(job.error_message) %}
+<div class="notice error">
+  <strong>{{ error_info.title }}</strong>
+  <p>{{ error_info.detail }}</p>
+  <details>
+    <summary>Detalle técnico</summary>
+    <code>{{ error_info.technical }}</code>
+  </details>
+</div>
+{% endif %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Buscar</h1>
+    <p>Encuentra chats, jobs y archivos descargados desde un solo lugar.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <form class="search-hero" method="get" action="/search">
+    <label>Buscar en todo
+      <input name="q" type="search" placeholder="Nombre, ID, archivo, error..." value="{{ q }}" autofocus>
+    </label>
+    <button class="button" type="submit">Buscar</button>
+  </form>
+</section>
+
+{% if q %}
+<section class="search-grid">
+  <div class="panel">
+    <div class="section-title">
+      <div>
+        <h2>Chats</h2>
+        <p>{{ results.chats|length }} coincidencias</p>
+      </div>
+    </div>
+    {% if results.chats %}
+    <div class="result-list">
+      {% for item in results.chats %}
+      <a class="result-item" href="{{ item.url }}">
+        <strong>{{ item.title }}</strong>
+        <span>{{ item.id }} · {{ item.subtitle }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state compact"><strong>Sin chats.</strong><p>Actualiza el cache de chats si falta alguno.</p></div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="section-title">
+      <div>
+        <h2>Jobs</h2>
+        <p>{{ results.jobs|length }} coincidencias</p>
+      </div>
+    </div>
+    {% if results.jobs %}
+    <div class="result-list">
+      {% for item in results.jobs %}
+      <a class="result-item" href="{{ item.url }}">
+        <strong>{{ item.title }}</strong>
+        <span>{{ item.subtitle }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state compact"><strong>Sin jobs.</strong><p>No hay historial que coincida.</p></div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="section-title">
+      <div>
+        <h2>Archivos</h2>
+        <p>{{ results.files|length }} coincidencias</p>
+      </div>
+    </div>
+    {% if results.files %}
+    <div class="result-list">
+      {% for item in results.files %}
+      <div class="result-item">
+        <a href="{{ item.url }}"><strong>{{ item.title }}</strong></a>
+        <span>{{ item.subtitle }}</span>
+        <a class="button small secondary" href="{{ item.download_url }}">Descargar</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state compact"><strong>Sin archivos.</strong><p>No encontré archivos descargados con ese texto.</p></div>
+    {% endif %}
+  </div>
+</section>
+{% else %}
+<section class="panel">
+  <div class="empty-state">
+    <strong>Escribe algo para buscar.</strong>
+    <p>Busca por nombre de chat, ID, nombre de archivo, tipo de medio, hashtag o error.</p>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
