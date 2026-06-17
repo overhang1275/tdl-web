@@ -34,6 +34,7 @@ window.addEventListener("pageshow", () => {
   const panelSelector = "#chats-panel";
   let searchTimer = 0;
   let chatsRequestId = 0;
+  let chatsRefreshRunning = false;
 
   function chatsPanel() {
     return document.querySelector(panelSelector);
@@ -47,16 +48,73 @@ window.addEventListener("pageshow", () => {
     return `/chats/list?${params.toString()}`;
   }
 
+  function isRefreshUrl(url) {
+    try {
+      return new URL(url, window.location.origin).searchParams.get("refresh") === "true";
+    } catch {
+      return String(url).includes("refresh=true");
+    }
+  }
+
+  function setRefreshButtons(disabled) {
+    document.querySelectorAll("[data-chats-url*='refresh=true']").forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) {
+        return;
+      }
+      if (disabled) {
+        button.dataset.originalText = button.textContent || "";
+        button.textContent = "Actualizando...";
+        button.disabled = true;
+      } else {
+        button.disabled = false;
+        if (button.dataset.originalText) {
+          button.textContent = button.dataset.originalText;
+        }
+      }
+    });
+  }
+
+  function showChatsLoading(panel, refresh) {
+    if (!refresh) {
+      return;
+    }
+    panel.setAttribute("aria-busy", "true");
+    panel.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner" aria-hidden="true"></div>
+        <strong>Actualizando cache de chats...</strong>
+        <p>Espera un momento. Estoy consultando tdl y guardando el resultado en JSON.</p>
+      </div>
+    `;
+  }
+
   async function loadChats(url) {
     const panel = chatsPanel();
     if (!panel) {
       return;
     }
+    const refresh = isRefreshUrl(url);
+    if (refresh && chatsRefreshRunning) {
+      return;
+    }
+    if (refresh) {
+      chatsRefreshRunning = true;
+      setRefreshButtons(true);
+      showChatsLoading(panel, true);
+    }
     const requestId = ++chatsRequestId;
-    const response = await fetch(url, { headers: { "X-Requested-With": "fetch" } });
-    const html = await response.text();
-    if (requestId === chatsRequestId) {
-      panel.innerHTML = html;
+    try {
+      const response = await fetch(url, { headers: { "X-Requested-With": "fetch" } });
+      const html = await response.text();
+      if (requestId === chatsRequestId) {
+        panel.innerHTML = html;
+      }
+    } finally {
+      if (refresh) {
+        chatsRefreshRunning = false;
+        setRefreshButtons(false);
+        panel.removeAttribute("aria-busy");
+      }
     }
   }
 

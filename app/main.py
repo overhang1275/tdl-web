@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import get_db, init_db
 from app.models import DownloadJob, DownloadTemplate, JobStatus, MediaType
 from app.schemas import JobCreate, JobRead
-from app.services.chat_cache import delete_chats_cache, read_chats_cache, refresh_chats_cache
+from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, read_chats_cache, refresh_chats_cache
 from app.services.files import directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
 from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job
@@ -459,11 +459,19 @@ def chats_page(request: Request):
 def api_chats(refresh: bool = False):
     try:
         refreshed = refresh
-        chats, updated_at = refresh_chats_cache() if refresh else read_chats_cache()
+        chats, updated_at = refresh_chats_cache(wait=False) if refresh else read_chats_cache()
         if not chats and not updated_at:
             chats, updated_at = refresh_chats_cache()
             refreshed = True
         return {"chats": chats, "updated_at": updated_at.isoformat() if updated_at else None, "cached": not refreshed}
+    except ChatsRefreshInProgress as exc:
+        chats, updated_at = read_chats_cache()
+        return {
+            "chats": chats,
+            "updated_at": updated_at.isoformat() if updated_at else None,
+            "cached": True,
+            "message": str(exc),
+        }
     except TdlError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -551,7 +559,7 @@ def chats_list(request: Request, q: str = "", page: int = 1, per_page: int = 25,
     refreshed = False
     try:
         if refresh:
-            chats, cached_at = refresh_chats_cache()
+            chats, cached_at = refresh_chats_cache(wait=False)
             refreshed = True
         else:
             chats, cached_at = read_chats_cache()
@@ -560,6 +568,9 @@ def chats_list(request: Request, q: str = "", page: int = 1, per_page: int = 25,
                 refreshed = True
         error = None
     except TdlError as exc:
+        chats, cached_at = read_chats_cache()
+        error = str(exc)
+    except ChatsRefreshInProgress as exc:
         chats, cached_at = read_chats_cache()
         error = str(exc)
     pagination = paginate_chats(chats, q=q, page=page, per_page=per_page)

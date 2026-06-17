@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import json
+from threading import Lock
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from app.config import settings
 from app.services.tdl import TdlService
+
+
+class ChatsRefreshInProgress(RuntimeError):
+    pass
+
+
+_refresh_lock = Lock()
 
 
 def chats_cache_path() -> Path:
@@ -42,10 +50,16 @@ def write_chats_cache(chats: list[dict[str, Any]]) -> datetime:
     return updated_at
 
 
-def refresh_chats_cache(tdl: TdlService | None = None) -> tuple[list[dict[str, Any]], datetime]:
-    chats = (tdl or TdlService()).list_chats()
-    updated_at = write_chats_cache(chats)
-    return chats, updated_at
+def refresh_chats_cache(tdl: TdlService | None = None, wait: bool = True) -> tuple[list[dict[str, Any]], datetime]:
+    acquired = _refresh_lock.acquire(blocking=wait)
+    if not acquired:
+        raise ChatsRefreshInProgress("Ya hay una actualización de chats en curso. Espera a que termine.")
+    try:
+        chats = (tdl or TdlService()).list_chats()
+        updated_at = write_chats_cache(chats)
+        return chats, updated_at
+    finally:
+        _refresh_lock.release()
 
 
 def delete_chats_cache() -> None:
