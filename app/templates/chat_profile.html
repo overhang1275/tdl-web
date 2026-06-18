@@ -11,6 +11,29 @@
   </div>
 </section>
 
+<section class="metric-grid">
+  <article class="metric-card">
+    <span>Jobs</span>
+    <strong>{{ jobs|length }}</strong>
+    <small>historial del chat</small>
+  </article>
+  <article class="metric-card">
+    <span>Archivos</span>
+    <strong>{{ downloaded_files }}</strong>
+    <small>descargados para este chat</small>
+  </article>
+  <article class="metric-card">
+    <span>Tamaño</span>
+    <strong>{{ downloaded_size }}</strong>
+    <small>{{ downloads_root }}</small>
+  </article>
+  <article class="metric-card">
+    <span>Export</span>
+    <strong>{{ "existe" if export_exists else "faltante" }}</strong>
+    <small>{{ export_updated_at.strftime("%Y-%m-%d %H:%M") if export_updated_at else "sin actualizar" }}</small>
+  </article>
+</section>
+
 <section class="panel">
   <div class="section-title">
     <div>
@@ -27,7 +50,23 @@
   <div class="notice"><code>{{ export_path }}</code></div>
   {% endif %}
   <div class="inline-action">
-    <a class="button" href="/jobs?chat_id={{ chat_id|urlencode }}&chat_title={{ (chat_title or '')|urlencode }}&refresh_export=true">Actualizar export.json</a>
+    <a class="button" href="/jobs?chat_id={{ chat_id|urlencode }}&chat_title={{ (chat_title or '')|urlencode }}&refresh_export=true&export_only=true">Solo actualizar export.json</a>
+    <a class="button secondary" href="/jobs?chat_id={{ chat_id|urlencode }}&chat_title={{ (chat_title or '')|urlencode }}&refresh_export=false">Descargar con export actual</a>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Descargas del chat</h2>
+      <p>Limpia solo los archivos descargados para este chat sin borrar exports ni jobs.</p>
+    </div>
+  </div>
+  <div class="job-actions">
+    <a class="button secondary" href="/search?q={{ chat_id|urlencode }}">Buscar archivos del chat</a>
+    <form method="post" action="/chats/{{ chat_id|urlencode }}/clean-downloads">
+      <button class="button danger" type="submit">Limpiar descargas del chat</button>
+    </form>
   </div>
 </section>
 

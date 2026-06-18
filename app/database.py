@@ -38,6 +38,8 @@ def migrate_sqlite() -> None:
     with engine.begin() as connection:
         if "refresh_export" not in columns:
             connection.execute(text("ALTER TABLE download_jobs ADD COLUMN refresh_export BOOLEAN NOT NULL DEFAULT 1"))
+        if "export_only" not in columns:
+            connection.execute(text("ALTER TABLE download_jobs ADD COLUMN export_only BOOLEAN NOT NULL DEFAULT 0"))
         if "cancel_requested" not in columns:
             connection.execute(text("ALTER TABLE download_jobs ADD COLUMN cancel_requested BOOLEAN NOT NULL DEFAULT 0"))
         if "download_observed_files" not in columns:
@@ -48,6 +50,11 @@ def migrate_sqlite() -> None:
             connection.execute(text("ALTER TABLE download_jobs ADD COLUMN download_speed_bps INTEGER NOT NULL DEFAULT 0"))
         if "download_eta_seconds" not in columns:
             connection.execute(text("ALTER TABLE download_jobs ADD COLUMN download_eta_seconds INTEGER"))
+    if "download_templates" in inspector.get_table_names():
+        template_columns = {column["name"] for column in inspector.get_columns("download_templates")}
+        with engine.begin() as connection:
+            if "export_only" not in template_columns:
+                connection.execute(text("ALTER TABLE download_templates ADD COLUMN export_only BOOLEAN NOT NULL DEFAULT 0"))
 
 
 def migrate_exports_to_chat_paths() -> None:

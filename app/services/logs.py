@@ -7,6 +7,19 @@ from app.config import settings
 from app.services.paths import safe_child
 
 
+EVENT_TITLES = (
+    ("exporting chat", "Export iniciado"),
+    ("export ready", "Export listo"),
+    ("reusing existing export", "Export listo"),
+    ("filtering exported json", "Filtrado iniciado"),
+    ("filtered messages", "Filtro terminado"),
+    ("starting media download", "Descarga iniciada"),
+    ("completed", "Job terminado"),
+    ("failed", "Job falló"),
+    ("cancelled", "Job cancelado"),
+)
+
+
 def job_log_path(job_id: int) -> Path:
     return safe_child(settings.logs_dir, f"job-{job_id}.log")
 
@@ -28,3 +41,19 @@ def read_job_log(job_id: int, tail_bytes: int = 200_000) -> str:
         if size > tail_bytes:
             handle.seek(size - tail_bytes)
         return handle.read().decode("utf-8", errors="replace")
+
+
+def job_events(job_id: int) -> list[dict[str, str]]:
+    events = []
+    for line in read_job_log(job_id).splitlines():
+        lower = line.lower()
+        title = next((title for needle, title in EVENT_TITLES if needle in lower), None)
+        if title is None:
+            continue
+        timestamp = ""
+        message = line
+        if line.startswith("[") and "]" in line:
+            timestamp, message = line[1:].split("]", 1)
+            message = message.strip()
+        events.append({"title": title, "timestamp": timestamp, "message": message})
+    return events[-30:]

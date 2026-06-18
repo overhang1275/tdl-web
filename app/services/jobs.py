@@ -45,6 +45,7 @@ def create_job(db: Session, payload: JobCreate, enqueue: bool = True) -> Downloa
         date_to=payload.date_to,
         skip_same=payload.skip_same,
         refresh_export=payload.refresh_export,
+        export_only=payload.export_only,
         output_subfolder=payload.output_subfolder,
     )
     db.add(job)
@@ -85,6 +86,7 @@ def find_duplicate_active_job(db: Session, payload: JobCreate) -> DownloadJob | 
             DownloadJob.date_from == payload.date_from,
             DownloadJob.date_to == payload.date_to,
             DownloadJob.output_subfolder == payload.output_subfolder,
+            DownloadJob.export_only == payload.export_only,
         )
         .order_by(DownloadJob.created_at.desc())
     )
@@ -119,6 +121,7 @@ def retry_job(db: Session, job: DownloadJob) -> DownloadJob:
         date_to=job.date_to,
         skip_same=job.skip_same,
         refresh_export=job.refresh_export,
+        export_only=job.export_only,
         output_subfolder=job.output_subfolder,
     )
     return create_job(db, payload)

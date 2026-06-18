@@ -6,13 +6,11 @@ import time
 
 from app.database import SessionLocal, engine, init_db
 from app.models import DownloadJob, JobStage, JobStatus
-from app.services.download import DownloadService
 from app.services.errors import friendly_error
-from app.services.export import ExportService
 from app.services.files import scan_download_progress
 from app.services.filtering import filter_export
 from app.services.logs import append_job_log
-from app.services.tdl import TdlCancelled
+from app.services.tdl import TdlCancelled, TdlService
 
 
 class JobCancelled(RuntimeError):
@@ -23,8 +21,7 @@ def run_download_job(job_id: int) -> None:
     engine.dispose()
     init_db()
     db = SessionLocal()
-    export_service = ExportService()
-    download_service = DownloadService()
+    tdl = TdlService()
     try:
         job = db.get(DownloadJob, job_id)
         if job is None:
@@ -58,7 +55,16 @@ def run_download_job(job_id: int) -> None:
             append_job_log(job.id, f"Reusing existing export: {export_path}")
         else:
             append_job_log(job.id, f"Exporting chat {job.chat_id}")
-            export_service.export_chat(job.chat_id, export_path, should_cancel=ensure_not_cancelled)
+            tdl.export_chat(job.chat_id, export_path, should_cancel=ensure_not_cancelled)
+        append_job_log(job.id, f"Export ready: {export_path}")
+
+        if job.export_only:
+            job.stage = JobStage.completed
+            job.status = JobStatus.completed
+            job.finished_at = datetime.utcnow()
+            db.commit()
+            append_job_log(job.id, "Completed export-only job. No filtering or download was requested.")
+            return
 
         raise_if_cancelled()
         job.stage = JobStage.filtering
@@ -118,7 +124,7 @@ def run_download_job(job_id: int) -> None:
                 track_download_progress()
             return cancelled
 
-        download_service.download_from_file(
+        tdl.download_from_file(
             Path(job.filtered_json_path),
             Path(job.download_path),
             skip_same=job.skip_same,

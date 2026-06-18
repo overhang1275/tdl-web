@@ -86,13 +86,7 @@ def downloaded_file_path(root: Path, relative_path: str) -> Path:
     return path
 
 
-def count_downloaded_files(path: Path) -> int:
-    if not path.exists():
-        return 0
-    return sum(1 for item in path.rglob("*") if item.is_file())
-
-
-def scan_download_progress(path: Path) -> tuple[int, int]:
+def scan_tree(path: Path) -> tuple[int, int]:
     if not path.exists():
         return 0, 0
     files = 0
@@ -107,14 +101,13 @@ def scan_download_progress(path: Path) -> tuple[int, int]:
     return files, total
 
 
+def count_downloaded_files(path: Path) -> int:
+    return scan_tree(path)[0]
+
+
+def scan_download_progress(path: Path) -> tuple[int, int]:
+    return scan_tree(path)
+
+
 def directory_size(path: Path) -> int:
-    if not path.exists():
-        return 0
-    total = 0
-    for item in path.rglob("*"):
-        if item.is_file():
-            try:
-                total += item.stat().st_size
-            except OSError:
-                continue
-    return total
+    return scan_tree(path)[1]

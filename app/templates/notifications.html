@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Notificaciones</h1>
+    <p>Estado de servicios y actividad reciente de jobs.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Servicios</h2>
+      <p>Estado actual de las piezas necesarias para descargar.</p>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>Servicio</th><th>Estado</th><th>Detalle</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Redis</strong></td>
+        <td>
+          <span class="pill {{ "status-completed" if status.redis_connected else "status-failed" }}">
+            {{ "conectado" if status.redis_connected else "error" }}
+          </span>
+        </td>
+        <td>{{ status.redis_error or status.redis_url }}</td>
+      </tr>
+      <tr>
+        <td><strong>Worker</strong></td>
+        <td>
+          <span class="pill {{ "status-completed" if status.worker_connected else "status-failed" }}">
+            {{ status.worker_count }} {{ "activo" if status.worker_count == 1 else "activos" }}
+          </span>
+        </td>
+        <td>{{ "Listo para procesar jobs" if status.worker_connected else "No hay workers conectados" }}</td>
+      </tr>
+      <tr>
+        <td><strong>Sesión</strong></td>
+        <td>
+          <span class="pill {{ "status-completed" if status.session_active else "status-failed" }}">
+            {{ "activa" if status.session_active else "pendiente" }}
+          </span>
+        </td>
+        <td>{{ status.session_error or status.storage }}</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <div>
+      <h2>Actividad reciente</h2>
+      <p>Jobs terminados, fallidos, cancelados o en curso.</p>
+    </div>
+  </div>
+  {% if jobs %}
+  <table>
+    <thead><tr><th>Job</th><th>Chat</th><th>Stage</th><th>Status</th><th>Fecha</th><th>Mensaje</th><th></th></tr></thead>
+    <tbody>
+    {% for job in jobs %}
+      {% set error_info = friendly_error(job.error_message) if job.error_message else none %}
+      <tr>
+        <td><strong>#{{ job.id }}</strong></td>
+        <td>
+          <strong>{{ job.chat_title or job.chat_id }}</strong>
+          {% if job.chat_title %}<small class="muted-line">{{ job.chat_id }}</small>{% endif %}
+        </td>
+        <td><span class="pill">{{ job.stage.value }}</span></td>
+        <td><span class="pill status-{{ job.status.value }}">{{ job.status.value }}</span></td>
+        <td>{{ job.finished_at.strftime("%Y-%m-%d %H:%M") if job.finished_at else "en curso" }}</td>
+        <td>
+          {% if error_info %}
+          <strong>{{ error_info.title }}</strong>
+          <small class="muted-line">{{ error_info.detail }}</small>
+          {% else %}
+          <span class="muted-line">{{ "Finalizado correctamente" if job.status.value == "completed" else "Sin errores recientes" }}</span>
+          {% endif %}
+        </td>
+        <td><a class="button small secondary" href="/jobs/{{ job.id }}">Abrir</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <strong>Sin actividad todavía.</strong>
+    <p>Cuando ejecutes jobs, sus cambios aparecerán aquí.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

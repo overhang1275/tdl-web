@@ -14,10 +14,29 @@
     <small class="muted-line">Sin cache local todavía. Usa “Actualizar chats”.</small>
     {% endif %}
   </div>
-  <button class="button secondary" type="button" data-chats-url="/chats/list?refresh=true&q={{ pagination.q | urlencode }}&per_page={{ pagination.per_page }}&page=1">Actualizar cache</button>
+  <button class="button secondary" type="button" data-chats-url="/chats/list?refresh=true&q={{ pagination.q | urlencode }}&chat_type={{ pagination.chat_type | urlencode }}&sort={{ pagination.sort | urlencode }}&per_page={{ pagination.per_page }}&page=1">Actualizar cache</button>
 </div>
 
-<form class="list-toolbar">
+<div class="chat-summary">
+  <button class="chat-stat {% if not pagination.chat_type %}active{% endif %}" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&chat_type=&sort={{ pagination.sort | urlencode }}&per_page={{ pagination.per_page }}&page=1">
+    <span>Todos</span>
+    <strong>{{ pagination.type_counts.channel + pagination.type_counts.group + pagination.type_counts.private + pagination.type_counts.other }}</strong>
+  </button>
+  <button class="chat-stat {% if pagination.chat_type == 'channel' %}active{% endif %}" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&chat_type=channel&sort={{ pagination.sort | urlencode }}&per_page={{ pagination.per_page }}&page=1">
+    <span>Canales</span>
+    <strong>{{ pagination.type_counts.channel }}</strong>
+  </button>
+  <button class="chat-stat {% if pagination.chat_type == 'group' %}active{% endif %}" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&chat_type=group&sort={{ pagination.sort | urlencode }}&per_page={{ pagination.per_page }}&page=1">
+    <span>Grupos</span>
+    <strong>{{ pagination.type_counts.group }}</strong>
+  </button>
+  <button class="chat-stat {% if pagination.chat_type == 'private' %}active{% endif %}" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&chat_type=private&sort={{ pagination.sort | urlencode }}&per_page={{ pagination.per_page }}&page=1">
+    <span>Privadas</span>
+    <strong>{{ pagination.type_counts.private }}</strong>
+  </button>
+</div>
+
+<form class="list-toolbar chat-toolbar">
   <label>Buscar
     <input
       name="q"
@@ -25,6 +44,22 @@
       placeholder="Nombre, username o ID"
       value="{{ pagination.q }}"
       autocomplete="off">
+  </label>
+  <label>Tipo
+    <select name="chat_type">
+      <option value="" {% if not pagination.chat_type %}selected{% endif %}>Todos</option>
+      <option value="channel" {% if pagination.chat_type == "channel" %}selected{% endif %}>Canales</option>
+      <option value="group" {% if pagination.chat_type == "group" %}selected{% endif %}>Grupos</option>
+      <option value="private" {% if pagination.chat_type == "private" %}selected{% endif %}>Privadas</option>
+    </select>
+  </label>
+  <label>Ordenar
+    <select name="sort">
+      <option value="json" {% if pagination.sort == "json" %}selected{% endif %}>Como JSON</option>
+      <option value="name" {% if pagination.sort == "name" %}selected{% endif %}>Nombre</option>
+      <option value="type" {% if pagination.sort == "type" %}selected{% endif %}>Tipo de chat</option>
+      <option value="id" {% if pagination.sort == "id" %}selected{% endif %}>ID</option>
+    </select>
   </label>
   <label>Mostrar
     <select name="per_page">
@@ -41,15 +76,23 @@
 <div class="notice error">{{ error }}</div>
 {% endif %}
 {% if chats %}
-<table>
-  <thead><tr><th>ID</th><th>Nombre</th><th>Username</th><th>Tipo</th><th>Topics</th><th></th></tr></thead>
+<table class="chats-table">
+  <thead><tr><th>Chat</th><th>Tipo</th><th>Topics</th><th></th></tr></thead>
   <tbody>
     {% for chat in chats %}
     <tr>
-      <td><code>{{ chat.id }}</code></td>
-      <td><strong>{{ chat.title or chat.visible_name or "Sin nombre" }}</strong></td>
-      <td>{% if chat.username %}@{{ chat.username }}{% else %}-{% endif %}</td>
-      <td><span class="pill">{{ chat.type or "chat" }}</span></td>
+      <td>
+        <div class="chat-name-cell">
+          <span class="chat-title-block">
+            <strong>{{ chat.title or chat.visible_name or "Sin nombre" }}</strong>
+            <small class="muted-line">
+              <code>{{ chat.id }}</code>
+              {% if chat.username %}<span>@{{ chat.username }}</span>{% endif %}
+            </small>
+          </span>
+        </div>
+      </td>
+      <td><span class="pill chat-type-{{ chat.type or 'chat' }}">{{ chat.type or "chat" }}</span></td>
       <td>{{ chat.topics_count or 0 }}</td>
       <td>
         <div class="table-actions">
@@ -65,12 +108,12 @@
   <div class="pagination-summary">Página {{ pagination.page }} de {{ pagination.page_count }}</div>
   <div class="pagination-actions">
     {% if pagination.has_prev %}
-    <button class="button small secondary" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</button>
+    <button class="button small secondary" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&chat_type={{ pagination.chat_type | urlencode }}&sort={{ pagination.sort | urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</button>
     {% else %}
     <button class="button small secondary" type="button" disabled>Anterior</button>
     {% endif %}
     {% if pagination.has_next %}
-    <button class="button small secondary" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</button>
+    <button class="button small secondary" type="button" data-chats-url="/chats/list?q={{ pagination.q | urlencode }}&chat_type={{ pagination.chat_type | urlencode }}&sort={{ pagination.sort | urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</button>
     {% else %}
     <button class="button small secondary" type="button" disabled>Siguiente</button>
     {% endif %}

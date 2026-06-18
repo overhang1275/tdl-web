@@ -1,0 +1,16 @@
+{% if events %}
+<div class="event-list">
+  {% for event in events %}
+  <div class="event-item">
+    <span>{{ event.timestamp or "-" }}</span>
+    <strong>{{ event.title }}</strong>
+    <small>{{ event.message }}</small>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state compact">
+  <strong>Sin eventos importantes todavía.</strong>
+  <p>Cuando el job avance, los hitos aparecerán aquí.</p>
+</div>
+{% endif %}

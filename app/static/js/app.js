@@ -147,14 +147,13 @@ window.addEventListener("pageshow", () => {
 
   window.addEventListener("change", (event) => {
     const select = event.target;
-    if (!(select instanceof HTMLSelectElement) || select.name !== "per_page" || !select.closest(panelSelector)) {
+    if (!(select instanceof HTMLSelectElement) || !["per_page", "chat_type", "sort"].includes(select.name) || !select.closest(panelSelector)) {
       return;
     }
     const form = select.closest("form");
     if (form) {
       form.querySelector("input[name='page']").value = "1";
-      const query = form.querySelector("input[name='q']");
-      loadChats(formUrl(form, { q: query ? query.value : "", per_page: select.value, page: "1" }));
+      loadChats(formUrl(form, { page: "1" }));
     }
   });
 
@@ -166,8 +165,12 @@ window.addEventListener("pageshow", () => {
     event.preventDefault();
     const query = form.querySelector("input[name='q']");
     const perPage = form.querySelector("select[name='per_page']");
+    const chatType = form.querySelector("select[name='chat_type']");
+    const sort = form.querySelector("select[name='sort']");
     loadChats(formUrl(form, {
       q: query ? query.value : "",
+      chat_type: chatType ? chatType.value : "",
+      sort: sort ? sort.value : "json",
       per_page: perPage ? perPage.value : "25",
       page: "1",
     }));

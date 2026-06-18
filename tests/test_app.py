@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from fastapi.testclient import TestClient
+
 from app.main import app, health
 from app.main import apply_template_prefill, paginate_chats, paginate_downloads
 from app.models import DownloadTemplate, MediaType
@@ -13,6 +15,23 @@ def test_health_endpoint():
     assert health() == {"status": "ok"}
 
 
+def test_security_headers_are_set():
+    response = TestClient(app).get("/health")
+
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "same-origin"
+
+
+def test_cross_origin_writes_are_blocked():
+    response = TestClient(app).post(
+        "/setup/login/cancel",
+        headers={"host": "127.0.0.1:8000", "origin": "https://example.com"},
+    )
+
+    assert response.status_code == 403
+
+
 def test_paginate_chats_filters_by_id_and_username():
     chats = [
         {"id": "100", "title": "General", "username": "main"},
@@ -23,6 +42,33 @@ def test_paginate_chats_filters_by_id_and_username():
 
     assert page["total"] == 1
     assert page["items"][0]["id"] == "200"
+
+
+def test_paginate_chats_filters_and_sorts_by_type():
+    chats = [
+        {"id": "300", "title": "Privado", "type": "private"},
+        {"id": "100", "title": "Canal", "type": "channel"},
+        {"id": "200", "title": "Grupo", "type": "group"},
+    ]
+
+    filtered = paginate_chats(chats, q="", page=1, per_page=10, chat_type="group", sort="type")
+    sorted_page = paginate_chats(chats, q="", page=1, per_page=10, sort="type")
+
+    assert filtered["total"] == 1
+    assert filtered["items"][0]["id"] == "200"
+    assert [item["id"] for item in sorted_page["items"]] == ["100", "200", "300"]
+
+
+def test_paginate_chats_can_keep_json_order():
+    chats = [
+        {"id": "300", "title": "C", "type": "private"},
+        {"id": "100", "title": "A", "type": "channel"},
+        {"id": "200", "title": "B", "type": "group"},
+    ]
+
+    page = paginate_chats(chats, q="", page=1, per_page=10, sort="json")
+
+    assert [item["id"] for item in page["items"]] == ["300", "100", "200"]
 
 
 def test_paginate_downloads_filters_sorts_and_pages():

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -19,6 +19,7 @@ class JobCreate(BaseModel):
     date_to: date | None = None
     skip_same: bool = True
     refresh_export: bool = True
+    export_only: bool = False
     output_subfolder: str = Field(min_length=1, max_length=128)
 
     @field_validator("chat_id")
@@ -51,28 +52,3 @@ class JobCreate(BaseModel):
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("date_from must be before or equal to date_to")
         return self
-
-
-class JobRead(BaseModel):
-    id: int
-    chat_id: str
-    chat_title: str | None
-    hashtag: str | None
-    media_type: str
-    search_text: str | None
-    output_subfolder: str
-    refresh_export: bool
-    stage: str
-    status: str
-    total_filtered_messages: int
-    total_downloaded_files: int
-    download_observed_files: int
-    download_observed_bytes: int
-    download_speed_bps: int
-    download_eta_seconds: int | None
-    error_message: str | None
-    created_at: datetime
-    started_at: datetime | None
-    finished_at: datetime | None
-
-    model_config = {"from_attributes": True}

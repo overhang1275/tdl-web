@@ -28,6 +28,7 @@
       <input type="hidden" name="date_to" value="{{ duplicate_payload.date_to or '' }}">
       <input type="hidden" name="skip_same" value="{{ 'true' if duplicate_payload.skip_same else 'false' }}">
       <input type="hidden" name="refresh_export" value="{{ 'true' if duplicate_payload.refresh_export else 'false' }}">
+      <input type="hidden" name="export_only" value="{{ 'true' if duplicate_payload.export_only else 'false' }}">
       <input type="hidden" name="output_subfolder" value="{{ duplicate_payload.output_subfolder }}">
       <input type="hidden" name="force" value="true">
       <button class="button" type="submit">Crear otro</button>
@@ -50,7 +51,7 @@
     <article class="template-card {% if selected_template and selected_template.id == template.id %}active{% endif %}">
       <div>
         <strong>{{ template.name }}</strong>
-        <span>{{ template.media_type.value }}{% if template.chat_title or template.chat_id %} · {{ template.chat_title or template.chat_id }}{% endif %}</span>
+        <span>{% if template.export_only %}solo export · {% endif %}{{ template.media_type.value }}{% if template.chat_title or template.chat_id %} · {{ template.chat_title or template.chat_id }}{% endif %}</span>
         <small>
           {% if template.hashtag %}{{ template.hashtag }} · {% endif %}
           {% if template.search_text %}{{ template.search_text }} · {% endif %}
@@ -96,6 +97,7 @@
       <label>Subcarpeta <input name="output_subfolder" placeholder="Opcional" value="{{ prefill.output_subfolder or '' }}"></label>
       <label class="check"><input name="skip_same" type="checkbox" {% if prefill.skip_same %}checked{% endif %}> Skip same</label>
       <label class="check"><input name="refresh_export" type="checkbox" {% if prefill.refresh_export %}checked{% endif %}> Actualizar export</label>
+      <label class="check wide"><input name="export_only" type="checkbox" {% if prefill.export_only %}checked{% endif %}> Solo actualizar export.json</label>
       <button class="button" type="submit">Guardar plantilla</button>
     </form>
   </details>
@@ -126,6 +128,7 @@
     <label>Hasta <input name="date_to" type="date" value="{{ prefill.date_to or '' }}"></label>
     <label>Subcarpeta <input name="output_subfolder" required value="{{ prefill.output_subfolder or 'download' }}"></label>
     <label class="check"><input name="skip_same" type="checkbox" {% if prefill.skip_same %}checked{% endif %}> Skip same</label>
+    <label class="check"><input name="export_only" type="checkbox" {% if prefill.export_only %}checked{% endif %}> Solo actualizar export</label>
     {% if prefill.export_exists %}
     <label class="check wide">
       <input name="refresh_export" type="checkbox" {% if prefill.refresh_export %}checked{% endif %}>

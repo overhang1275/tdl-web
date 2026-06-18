@@ -1,6 +1,6 @@
 {% if jobs %}
 <table>
-  <thead><tr><th>ID</th><th>Chat</th><th>Export</th><th>Stage</th><th>Status</th><th>Mensajes</th><th>Archivos</th><th></th></tr></thead>
+  <thead><tr><th>ID</th><th>Chat</th><th>Modo</th><th>Export</th><th>Stage</th><th>Status</th><th>Mensajes</th><th>Archivos</th><th></th></tr></thead>
   <tbody>
     {% for job in jobs %}
     <tr>
@@ -9,6 +9,7 @@
         <strong>{{ job.chat_title or job.chat_id }}</strong>
         {% if job.chat_title %}<small class="muted-line">{{ job.chat_id }}</small>{% endif %}
       </td>
+      <td><span class="pill">{{ "solo export" if job.export_only else "descarga" }}</span></td>
       <td>{{ "actualiza" if job.refresh_export else "reutiliza" }}</td>
       <td><span class="pill">{{ job.stage.value }}</span></td>
       <td><span class="pill status-{{ job.status.value }}">{{ job.status.value }}</span></td>

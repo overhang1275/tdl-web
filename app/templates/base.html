@@ -37,6 +37,9 @@
           <a class="{{ 'active' if request.url.path.startswith('/search') else '' }}" href="/search">
             <span>Buscar</span>
           </a>
+          <a class="{{ 'active' if request.url.path.startswith('/notifications') else '' }}" href="/notifications">
+            <span>Notificaciones</span>
+          </a>
         </nav>
       </aside>
       <main class="shell">

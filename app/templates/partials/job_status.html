@@ -20,6 +20,7 @@
   <div><span>Stage</span><strong>{{ job.stage.value }}</strong></div>
   <div><span>Status</span><strong>{{ job.status.value }}</strong></div>
   <div><span>Cola</span><strong>{% if queue_position %}#{{ queue_position }}{% elif job.status.value == "pending" %}pendiente{% else %}-{% endif %}</strong></div>
+  <div><span>Modo</span><strong>{{ "solo export" if job.export_only else "descarga" }}</strong></div>
   <div><span>Export</span><strong>{{ "actualiza" if job.refresh_export else "reutiliza" }}</strong></div>
   <div><span>Archivos encontrados</span><strong>{{ found_count }}</strong></div>
   <div><span>Archivos descargados</span><strong>{{ downloaded_count }}</strong></div>

@@ -175,7 +175,7 @@ sudo systemctl reload nginx
 
 ## Seguridad
 
-- El wrapper de `tdl` usa `subprocess.run([...])` sin `shell=True`.
+- El wrapper de `tdl` usa `subprocess.Popen([...])` sin `shell=True`.
 - `chat_id`, filtros y subcarpetas se validan con Pydantic.
 - Las rutas de descarga/export/log se construyen desde directorios base controlados.
 - Se bloquea path traversal con `Path.resolve()`.
@@ -186,22 +186,9 @@ sudo systemctl reload nginx
 ## API
 
 - `GET /health`
-- `GET /api/session/status`
-- `POST /api/session/login`
-- `GET /api/chats`
-- `POST /api/jobs`
-- `GET /api/jobs`
-- `GET /api/jobs/{job_id}`
-- `GET /api/jobs/{job_id}/logs`
-- `GET /api/jobs/{job_id}/files`
+- `GET /api/jobs/notifications` endpoint interno usado por la UI para toasts.
 
-Ejemplo:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/jobs \
-  -H 'Content-Type: application/json' \
-  -d '{"chat_id":"xxxxxxxxxx","media_type":"video","output_subfolder":"videos","skip_same":true}'
-```
+Las acciones principales se hacen desde la interfaz web. La API CRUD antigua se eliminó porque duplicaba la UI y no tenía consumidores reales dentro del proyecto.
 
 ## Desarrollo local
 

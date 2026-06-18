@@ -1,4 +1,20 @@
 {% extends "base.html" %}
+{% macro gallery_pagination(job, pagination) -%}
+<div class="pagination gallery-pagination">
+  <span class="pagination-summary">
+    Mostrando {{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }}
+  </span>
+  <div class="pagination-actions">
+    {% if pagination.has_prev %}
+    <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</a>
+    {% endif %}
+    <span class="pill">Página {{ pagination.page }} / {{ pagination.page_count }}</span>
+    {% if pagination.has_next %}
+    <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</a>
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -53,20 +69,7 @@
   </form>
 
   {% if files %}
-  <div class="pagination gallery-pagination">
-    <span class="pagination-summary">
-      Mostrando {{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }}
-    </span>
-    <div class="pagination-actions">
-      {% if pagination.has_prev %}
-      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</a>
-      {% endif %}
-      <span class="pill">Página {{ pagination.page }} / {{ pagination.page_count }}</span>
-      {% if pagination.has_next %}
-      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</a>
-      {% endif %}
-    </div>
-  </div>
+  {{ gallery_pagination(job, pagination) }}
 
   <div class="download-gallery">
     {% for file in files %}
@@ -101,20 +104,7 @@
     {% endfor %}
   </div>
 
-  <div class="pagination gallery-pagination">
-    <span class="pagination-summary">
-      Mostrando {{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }}
-    </span>
-    <div class="pagination-actions">
-      {% if pagination.has_prev %}
-      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page - 1 }}">Anterior</a>
-      {% endif %}
-      <span class="pill">Página {{ pagination.page }} / {{ pagination.page_count }}</span>
-      {% if pagination.has_next %}
-      <a class="button small secondary" href="/downloads/{{ job.id }}?q={{ pagination.q|urlencode }}&kind={{ pagination.kind|urlencode }}&sort={{ pagination.sort|urlencode }}&per_page={{ pagination.per_page }}&page={{ pagination.page + 1 }}">Siguiente</a>
-      {% endif %}
-    </div>
-  </div>
+  {{ gallery_pagination(job, pagination) }}
   {% else %}
   <div class="empty-state">
     {% if all_files_count %}

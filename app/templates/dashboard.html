@@ -31,6 +31,35 @@
   </article>
 </section>
 
+<section class="metric-grid">
+  <article class="metric-card">
+    <span>Chats cache</span>
+    <strong>{{ metrics.chat_counts.total }}</strong>
+    <small>
+      {% if metrics.chat_counts.cached_at %}
+      actualizado {{ metrics.chat_counts.cached_at.strftime("%Y-%m-%d %H:%M") }}
+      {% else %}
+      sin cache guardado
+      {% endif %}
+    </small>
+  </article>
+  <article class="metric-card">
+    <span>Canales</span>
+    <strong>{{ metrics.chat_counts.channels }}</strong>
+    <small>detectados en chats.json</small>
+  </article>
+  <article class="metric-card">
+    <span>Grupos</span>
+    <strong>{{ metrics.chat_counts.groups }}</strong>
+    <small>detectados en chats.json</small>
+  </article>
+  <article class="metric-card">
+    <span>Privadas</span>
+    <strong>{{ metrics.chat_counts.private }}</strong>
+    <small>conversaciones directas</small>
+  </article>
+</section>
+
 {% if metrics.latest_errors %}
 <section class="panel">
   <div class="section-title">

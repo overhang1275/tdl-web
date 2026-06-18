@@ -5,6 +5,7 @@ from datetime import date, datetime
 import mimetypes
 from pathlib import Path
 import shutil
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, PlainTextResponse
@@ -20,15 +21,14 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db, init_db
 from app.models import DownloadJob, DownloadTemplate, JobStatus, MediaType
-from app.schemas import JobCreate, JobRead
+from app.schemas import JobCreate
 from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, read_chats_cache, refresh_chats_cache
 from app.services.errors import friendly_error
-from app.services.files import directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
+from app.services.files import count_downloaded_files, directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
 from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job
-from app.services.logs import job_log_path, read_job_log
+from app.services.logs import job_events, job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child, sanitize_subfolder
-from app.services.session import SessionService
 from app.services.search import global_search
 from app.services.tdl import TdlError, TdlService
 
@@ -46,6 +46,33 @@ templates.env.globals["human_size"] = human_size
 templates.env.globals["human_duration"] = human_duration
 templates.env.globals["friendly_error"] = friendly_error
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def same_origin_request(request: Request) -> bool:
+    host = request.headers.get("host", "")
+    for header in ("origin", "referer"):
+        value = request.headers.get(header)
+        if not value:
+            continue
+        parsed = urlparse(value)
+        if parsed.netloc and parsed.netloc != host:
+            return False
+    return True
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    if request.method in UNSAFE_METHODS and not same_origin_request(request):
+        return PlainTextResponse("Cross-origin writes are blocked.", status_code=403)
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    return response
 
 
 def setup_context(request: Request, message: str | None = None) -> dict:
@@ -68,7 +95,7 @@ def system_status(tdl: TdlService | None = None) -> dict[str, object]:
     login_session = interactive_login_service.status()
     tdl_installed = bool(shutil.which(tdl.binary) or ("/" in tdl.binary and Path(tdl.binary).exists()))
     try:
-        session_active = SessionService(tdl).is_logged_in()
+        session_active = tdl.is_logged_in()
         session_error = None
     except Exception as exc:
         session_active = False
@@ -127,6 +154,10 @@ def job_prefill_from_request(request: Request) -> dict[str, object]:
     refresh_export = not export_exists
     if refresh_export_param is not None:
         refresh_export = refresh_export_param.lower() in {"1", "true", "yes", "on"}
+    export_only_param = request.query_params.get("export_only")
+    export_only = False
+    if export_only_param is not None:
+        export_only = export_only_param.lower() in {"1", "true", "yes", "on"}
     return {
         "chat_id": chat_id,
         "chat_title": chat_title,
@@ -140,6 +171,7 @@ def job_prefill_from_request(request: Request) -> dict[str, object]:
         "export_exists": export_exists,
         "export_path": str(export_path) if export_path else "",
         "refresh_export": refresh_export,
+        "export_only": export_only,
         "template_id": "",
     }
 
@@ -165,6 +197,7 @@ def apply_template_prefill(prefill: dict[str, object], template: DownloadTemplat
         values["output_subfolder"] = template.output_subfolder
     values["skip_same"] = template.skip_same
     values["refresh_export"] = template.refresh_export
+    values["export_only"] = template.export_only
     values["template_id"] = template.id
     refresh_prefill_export_info(values)
     return values
@@ -195,6 +228,36 @@ def normalize_optional_text(value: str | None) -> str | None:
     return value or None
 
 
+def job_form_prefill(
+    chat_id: str,
+    chat_title: str | None,
+    hashtag: str | None,
+    media_type: str,
+    search_text: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    skip_same: bool,
+    refresh_export: bool,
+    export_only: bool,
+    output_subfolder: str | None,
+) -> dict[str, object]:
+    return {
+        "chat_id": chat_id,
+        "chat_title": chat_title or "",
+        "hashtag": hashtag or "",
+        "media_type": media_type,
+        "search_text": search_text or "",
+        "date_from": date_from.isoformat() if date_from else "",
+        "date_to": date_to.isoformat() if date_to else "",
+        "skip_same": skip_same,
+        "export_only": export_only,
+        "output_subfolder": output_subfolder or "download",
+        "export_exists": False,
+        "export_path": "",
+        "refresh_export": refresh_export,
+    }
+
+
 def get_job_or_404(db: Session, job_id: int) -> DownloadJob:
     job = db.get(DownloadJob, job_id)
     if job is None:
@@ -215,12 +278,23 @@ def dashboard_metrics(db: Session) -> dict[str, object]:
         ).all()
     )
     disk_bytes = directory_size(settings.downloads_dir)
+    cached_chats, cached_at = read_chats_cache()
+    chat_counts = {"channels": 0, "groups": 0, "private": 0, "total": len(cached_chats), "cached_at": cached_at}
+    for chat in cached_chats:
+        chat_type = str(chat.get("type") or "").lower()
+        if "channel" in chat_type:
+            chat_counts["channels"] += 1
+        elif "group" in chat_type:
+            chat_counts["groups"] += 1
+        elif "private" in chat_type or "user" in chat_type:
+            chat_counts["private"] += 1
     return {
         "active_jobs": active_count,
         "failed_jobs": failed_count,
         "downloaded_files": downloaded_files,
         "disk_usage": human_size(disk_bytes),
         "latest_errors": latest_errors,
+        "chat_counts": chat_counts,
     }
 
 
@@ -285,7 +359,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"logged_in": SessionService().is_logged_in(), "jobs": jobs, "metrics": dashboard_metrics(db)},
+        context={"logged_in": TdlService().is_logged_in(), "jobs": jobs, "metrics": dashboard_metrics(db)},
     )
 
 
@@ -296,6 +370,17 @@ def search_page(request: Request, q: str = "", db: Session = Depends(get_db)):
         request=request,
         name="search.html",
         context={"q": query, "results": global_search(db, query)},
+    )
+
+
+@app.get("/notifications", response_class=HTMLResponse)
+def notifications_page(request: Request, db: Session = Depends(get_db)):
+    jobs = list_jobs(db)[:50]
+    status = system_status()
+    return templates.TemplateResponse(
+        request=request,
+        name="notifications.html",
+        context={"jobs": jobs, "status": status},
     )
 
 
@@ -329,41 +414,6 @@ def setup_reset(
 @app.get("/setup/login", response_class=HTMLResponse)
 def setup_login_get() -> RedirectResponse:
     return RedirectResponse(url="/setup", status_code=303)
-
-
-def login_session_payload() -> dict:
-    session = interactive_login_service.status()
-    return {
-        "running": session.running,
-        "started_at": session.started_at,
-        "finished_at": session.finished_at,
-        "returncode": session.returncode,
-        "error": session.error,
-        "output": "\n".join(session.output[-300:]),
-    }
-
-
-@app.post("/api/session/login/start")
-def api_login_start():
-    try:
-        interactive_login_service.start()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return login_session_payload()
-
-
-@app.post("/api/session/login/input")
-def api_login_input(value: str = Form(...)):
-    try:
-        interactive_login_service.send(value)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return login_session_payload()
-
-
-@app.get("/api/session/login/status")
-def api_login_status():
-    return login_session_payload()
 
 
 @app.post("/setup/login/start", response_class=HTMLResponse)
@@ -426,67 +476,9 @@ def setup_login_cancel(request: Request):
     )
 
 
-@app.post("/api/session/login")
-def api_session_login(
-    phone: str | None = Form(default=None),
-    code: str | None = Form(default=None),
-    password: str | None = Form(default=None),
-):
-    try:
-        output = SessionService().login(phone=phone, code=code, password=password)
-        return {"ok": True, "output": output}
-    except TdlError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/setup/login", response_class=HTMLResponse)
-def setup_login(
-    request: Request,
-    phone: str | None = Form(default=None),
-    code: str | None = Form(default=None),
-    password: str | None = Form(default=None),
-):
-    try:
-        message = SessionService().login(phone=phone, code=code, password=password) or "Login command completed."
-    except TdlError as exc:
-        message = f"tdl login requires CLI setup: {exc}"
-    return templates.TemplateResponse(request=request, name="setup.html", context=setup_context(request, message))
-
-
-@app.get("/api/session/status")
-def api_session_status() -> dict[str, bool]:
-    return {"logged_in": SessionService().is_logged_in()}
-
-
-@app.get("/api/setup/status")
-def api_setup_status():
-    return system_status()
-
-
 @app.get("/chats", response_class=HTMLResponse)
 def chats_page(request: Request):
     return templates.TemplateResponse(request=request, name="chats.html")
-
-
-@app.get("/api/chats")
-def api_chats(refresh: bool = False):
-    try:
-        refreshed = refresh
-        chats, updated_at = refresh_chats_cache(wait=False) if refresh else read_chats_cache()
-        if not chats and not updated_at:
-            chats, updated_at = refresh_chats_cache()
-            refreshed = True
-        return {"chats": chats, "updated_at": updated_at.isoformat() if updated_at else None, "cached": not refreshed}
-    except ChatsRefreshInProgress as exc:
-        chats, updated_at = read_chats_cache()
-        return {
-            "chats": chats,
-            "updated_at": updated_at.isoformat() if updated_at else None,
-            "cached": True,
-            "message": str(exc),
-        }
-    except TdlError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def chat_search_text(chat: dict) -> str:
@@ -500,11 +492,42 @@ def chat_search_text(chat: dict) -> str:
     return " ".join(str(value).lower() for value in values if value)
 
 
-def paginate_chats(chats: list[dict], q: str, page: int, per_page: int) -> dict:
+def chat_type_group(chat: dict) -> str:
+    chat_type = str(chat.get("type") or "").lower()
+    if "channel" in chat_type:
+        return "channel"
+    if "group" in chat_type:
+        return "group"
+    if "private" in chat_type or "user" in chat_type:
+        return "private"
+    return "other"
+
+
+def chat_display_name(chat: dict) -> str:
+    return str(chat.get("title") or chat.get("visible_name") or chat.get("username") or chat.get("id") or "").lower()
+
+
+def paginate_chats(chats: list[dict], q: str, page: int, per_page: int, chat_type: str = "", sort: str = "json") -> dict:
     per_page_options = [10, 25, 50, 100]
     per_page = per_page if per_page in per_page_options else 25
+    chat_type = chat_type if chat_type in {"", "channel", "group", "private"} else ""
+    sort = sort if sort in {"json", "name", "type", "id"} else "json"
     q = q.strip()
-    filtered = [chat for chat in chats if q.lower() in chat_search_text(chat)] if q else chats
+    search_filtered = [chat for chat in chats if q.lower() in chat_search_text(chat)] if q else chats
+    type_counts = {"channel": 0, "group": 0, "private": 0, "other": 0}
+    for chat in search_filtered:
+        group = chat_type_group(chat)
+        type_counts[group] = type_counts.get(group, 0) + 1
+    filtered = search_filtered
+    if chat_type:
+        filtered = [chat for chat in filtered if chat_type_group(chat) == chat_type]
+    if sort == "type":
+        type_order = {"channel": 0, "group": 1, "private": 2, "other": 3}
+        filtered = sorted(filtered, key=lambda chat: (type_order.get(chat_type_group(chat), 9), chat_display_name(chat)))
+    elif sort == "id":
+        filtered = sorted(filtered, key=lambda chat: str(chat.get("id") or ""))
+    elif sort == "name":
+        filtered = sorted(filtered, key=chat_display_name)
     total = len(filtered)
     page_count = max(1, (total + per_page - 1) // per_page)
     page = min(max(page, 1), page_count)
@@ -513,6 +536,9 @@ def paginate_chats(chats: list[dict], q: str, page: int, per_page: int) -> dict:
     return {
         "items": filtered[start:end],
         "q": q,
+        "chat_type": chat_type,
+        "sort": sort,
+        "type_counts": type_counts,
         "page": page,
         "per_page": per_page,
         "per_page_options": per_page_options,
@@ -567,7 +593,7 @@ def paginate_downloads(files: list[dict], q: str, kind: str, sort: str, page: in
 
 
 @app.get("/chats/list", response_class=HTMLResponse)
-def chats_list(request: Request, q: str = "", page: int = 1, per_page: int = 25, refresh: bool = False):
+def chats_list(request: Request, q: str = "", page: int = 1, per_page: int = 25, refresh: bool = False, chat_type: str = "", sort: str = "json"):
     cached_at = None
     refreshed = False
     try:
@@ -586,7 +612,7 @@ def chats_list(request: Request, q: str = "", page: int = 1, per_page: int = 25,
     except ChatsRefreshInProgress as exc:
         chats, cached_at = read_chats_cache()
         error = str(exc)
-    pagination = paginate_chats(chats, q=q, page=page, per_page=per_page)
+    pagination = paginate_chats(chats, q=q, page=page, per_page=per_page, chat_type=chat_type, sort=sort)
     return templates.TemplateResponse(
         request=request,
         name="partials/chats_table.html",
@@ -622,6 +648,12 @@ def chat_profile(request: Request, chat_id: str, db: Session = Depends(get_db)):
             export_updated_at = datetime.fromtimestamp(export_path.stat().st_mtime)
     except ValueError:
         export_path = None
+    try:
+        downloads_root = safe_child(settings.downloads_dir, chat_path_key(chat_id))
+    except ValueError:
+        downloads_root = settings.downloads_dir / "__invalid__"
+    downloaded_files = count_downloaded_files(downloads_root)
+    downloaded_bytes = directory_size(downloads_root)
     return templates.TemplateResponse(
         request=request,
         name="chat_profile.html",
@@ -633,8 +665,22 @@ def chat_profile(request: Request, chat_id: str, db: Session = Depends(get_db)):
             "export_path": export_path,
             "export_exists": export_exists,
             "export_updated_at": export_updated_at,
+            "downloads_root": downloads_root,
+            "downloaded_files": downloaded_files,
+            "downloaded_size": human_size(downloaded_bytes),
         },
     )
+
+
+@app.post("/chats/{chat_id}/clean-downloads")
+def chat_clean_downloads(chat_id: str):
+    try:
+        downloads_root = safe_child(settings.downloads_dir, chat_path_key(chat_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid chat id") from exc
+    if downloads_root.exists():
+        shutil.rmtree(downloads_root, ignore_errors=True)
+    return RedirectResponse(url=f"/chats/{chat_id}", status_code=303)
 
 
 @app.get("/jobs", response_class=HTMLResponse)
@@ -668,6 +714,7 @@ def templates_create(
     date_to: date | None = Form(default=None),
     skip_same: bool = Form(False),
     refresh_export: bool = Form(False),
+    export_only: bool = Form(False),
     output_subfolder: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ):
@@ -697,6 +744,7 @@ def templates_create(
             date_to=date_to,
             skip_same=skip_same,
             refresh_export=refresh_export,
+            export_only=export_only,
             output_subfolder=output_subfolder,
         )
         db.add(template)
@@ -713,21 +761,7 @@ def templates_create(
                 "selected_template": None,
                 "error": None,
                 "template_error": str(exc),
-                "prefill": {
-                    "chat_id": chat_id or "",
-                    "chat_title": chat_title or "",
-                    "hashtag": hashtag or "",
-                    "media_type": media_type,
-                    "search_text": search_text or "",
-                    "date_from": date_from.isoformat() if date_from else "",
-                    "date_to": date_to.isoformat() if date_to else "",
-                    "skip_same": skip_same,
-                    "output_subfolder": output_subfolder or "download",
-                    "export_exists": False,
-                    "export_path": "",
-                    "refresh_export": refresh_export,
-                    "template_id": "",
-                },
+                "prefill": {**job_form_prefill(chat_id or "", chat_title, hashtag, media_type, search_text, date_from, date_to, skip_same, refresh_export, export_only, output_subfolder), "template_id": ""},
             },
             status_code=400,
         )
@@ -754,6 +788,7 @@ def jobs_create_form(
     date_to: date | None = Form(default=None),
     skip_same: bool = Form(False),
     refresh_export: bool = Form(False),
+    export_only: bool = Form(False),
     output_subfolder: str = Form(...),
     force: bool = Form(False),
     db: Session = Depends(get_db),
@@ -769,6 +804,7 @@ def jobs_create_form(
             date_to=date_to,
             skip_same=skip_same,
             refresh_export=refresh_export,
+            export_only=export_only,
             output_subfolder=output_subfolder,
         )
         duplicate_job = find_duplicate_active_job(db, payload)
@@ -784,20 +820,7 @@ def jobs_create_form(
                     "template_error": None,
                     "duplicate_job": duplicate_job,
                     "duplicate_payload": payload,
-                    "prefill": {
-                        "chat_id": chat_id,
-                        "chat_title": chat_title or "",
-                        "hashtag": hashtag or "",
-                        "media_type": media_type,
-                        "search_text": search_text or "",
-                        "date_from": date_from.isoformat() if date_from else "",
-                        "date_to": date_to.isoformat() if date_to else "",
-                        "skip_same": skip_same,
-                        "output_subfolder": output_subfolder,
-                        "export_exists": False,
-                        "export_path": "",
-                        "refresh_export": refresh_export,
-                    },
+                    "prefill": job_form_prefill(chat_id, chat_title, hashtag, media_type, search_text, date_from, date_to, skip_same, refresh_export, export_only, output_subfolder),
                 },
                 status_code=409,
             )
@@ -813,20 +836,7 @@ def jobs_create_form(
                 "selected_template": None,
                 "error": f"{exc}. Instala/inicia Redis y vuelve a intentar.",
                 "template_error": None,
-                "prefill": {
-                    "chat_id": chat_id,
-                    "chat_title": chat_title or "",
-                    "hashtag": hashtag or "",
-                    "media_type": media_type,
-                    "search_text": search_text or "",
-                    "date_from": date_from.isoformat() if date_from else "",
-                    "date_to": date_to.isoformat() if date_to else "",
-                    "skip_same": skip_same,
-                    "output_subfolder": output_subfolder,
-                    "export_exists": False,
-                    "export_path": "",
-                    "refresh_export": refresh_export,
-                },
+                "prefill": job_form_prefill(chat_id, chat_title, hashtag, media_type, search_text, date_from, date_to, skip_same, refresh_export, export_only, output_subfolder),
             },
             status_code=503,
         )
@@ -840,42 +850,10 @@ def jobs_create_form(
                 "selected_template": None,
                 "error": str(exc),
                 "template_error": None,
-                "prefill": {
-                    "chat_id": chat_id,
-                    "chat_title": chat_title or "",
-                    "hashtag": hashtag or "",
-                    "media_type": media_type,
-                    "search_text": search_text or "",
-                    "date_from": date_from.isoformat() if date_from else "",
-                    "date_to": date_to.isoformat() if date_to else "",
-                    "skip_same": skip_same,
-                    "output_subfolder": output_subfolder,
-                    "export_exists": False,
-                    "export_path": "",
-                    "refresh_export": refresh_export,
-                },
+                "prefill": job_form_prefill(chat_id, chat_title, hashtag, media_type, search_text, date_from, date_to, skip_same, refresh_export, export_only, output_subfolder),
             },
             status_code=400,
         )
-
-
-@app.post("/api/jobs", response_model=JobRead)
-def api_create_job(payload: JobCreate, db: Session = Depends(get_db)):
-    try:
-        duplicate_job = find_duplicate_active_job(db, payload)
-        if duplicate_job:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Ya existe un job parecido activo: #{duplicate_job.id}",
-            )
-        return create_job(db, payload)
-    except QueueUnavailableError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.get("/api/jobs", response_model=list[JobRead])
-def api_list_jobs(db: Session = Depends(get_db)):
-    return list_jobs(db)
 
 
 @app.get("/api/jobs/notifications")
@@ -897,36 +875,13 @@ def api_job_notifications(db: Session = Depends(get_db)):
     }
 
 
-@app.get("/api/jobs/{job_id}", response_model=JobRead)
-def api_get_job(job_id: int, db: Session = Depends(get_db)):
-    return get_job_or_404(db, job_id)
-
-
-@app.post("/api/jobs/{job_id}/cancel", response_model=JobRead)
-def api_cancel_job(job_id: int, db: Session = Depends(get_db)):
-    return cancel_job(db, get_job_or_404(db, job_id))
-
-
-@app.get("/api/jobs/{job_id}/logs", response_class=PlainTextResponse)
-def api_job_logs(job_id: int, db: Session = Depends(get_db)):
-    get_job_or_404(db, job_id)
-    return read_job_log(job_id)
-
-
-@app.get("/api/jobs/{job_id}/files")
-def api_job_files(job_id: int, db: Session = Depends(get_db)):
-    job = get_job_or_404(db, job_id)
-    root = job_download_root(job.id, job.download_path)
-    return {"files": list_downloaded_files(root)}
-
-
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
 def job_detail(request: Request, job_id: int, db: Session = Depends(get_db)):
     job = get_job_or_404(db, job_id)
     return templates.TemplateResponse(
         request=request,
         name="job_detail.html",
-        context={"job": job, "queue_position": queue_position(job)},
+        context={"job": job, "queue_position": queue_position(job), "events": job_events(job.id)},
     )
 
 
@@ -991,6 +946,16 @@ def job_logs_partial(request: Request, job_id: int, db: Session = Depends(get_db
         request=request,
         name="partials/job_logs.html",
         context={"logs": read_job_log(job_id)},
+    )
+
+
+@app.get("/jobs/{job_id}/events", response_class=HTMLResponse)
+def job_events_partial(request: Request, job_id: int, db: Session = Depends(get_db)):
+    get_job_or_404(db, job_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/job_events.html",
+        context={"events": job_events(job_id)},
     )
 
 
