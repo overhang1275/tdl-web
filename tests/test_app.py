@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.main import app, health
-from app.main import apply_template_prefill, paginate_chats, paginate_downloads
+from app.main import apply_template_prefill, paginate_chats, paginate_downloads, start_local_services
 from app.models import DownloadTemplate, MediaType
 from app.services.errors import friendly_error
 from app.services import chat_cache
@@ -30,6 +30,20 @@ def test_cross_origin_writes_are_blocked():
     )
 
     assert response.status_code == 403
+
+
+def test_start_local_services_does_nothing_when_ready(monkeypatch):
+    monkeypatch.setattr("app.main.redis_ping", lambda: True)
+    monkeypatch.setattr("app.main.worker_count", lambda: 1)
+
+    assert start_local_services() == ["Redis ya estaba conectado.", "Worker ya estaba conectado."]
+
+
+def test_start_local_services_does_not_start_remote_redis(monkeypatch):
+    monkeypatch.setattr("app.main.redis_ping", lambda: False)
+    monkeypatch.setattr("app.main.settings.redis_url", "redis://redis.example.com:6379/0")
+
+    assert start_local_services() == ["Redis está configurado en remoto; inícialo fuera de la app."]
 
 
 def test_paginate_chats_filters_by_id_and_username():

@@ -3,8 +3,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 import mimetypes
+import os
 from pathlib import Path
 import shutil
+import subprocess
+import sys
+import time
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
@@ -49,6 +53,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+SERVICE_PROCESSES: list[subprocess.Popen] = []
 
 
 def same_origin_request(request: Request) -> bool:
@@ -129,6 +134,65 @@ def system_status(tdl: TdlService | None = None) -> dict[str, object]:
         "storage": str(tdl.storage_path),
         "redis_url": settings.redis_url,
     }
+
+
+def redis_ping() -> bool:
+    try:
+        Redis.from_url(settings.redis_url).ping()
+        return True
+    except RedisError:
+        return False
+
+
+def worker_count() -> int:
+    redis = Redis.from_url(settings.redis_url)
+    return len(Worker.all(connection=redis))
+
+
+def wait_until(check, seconds: float = 4) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if check():
+            return True
+        time.sleep(0.25)
+    return check()
+
+
+def start_local_services() -> list[str]:
+    messages: list[str] = []
+    redis_url = urlparse(settings.redis_url)
+    if not redis_ping():
+        if redis_url.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            messages.append("Redis está configurado en remoto; inícialo fuera de la app.")
+        elif not shutil.which("redis-server"):
+            messages.append("redis-server no está instalado o no está en PATH.")
+        else:
+            subprocess.Popen(["redis-server", "--daemonize", "yes"])
+            messages.append("Redis iniciado." if wait_until(redis_ping) else "Intenté iniciar Redis, pero aún no responde.")
+    else:
+        messages.append("Redis ya estaba conectado.")
+
+    if redis_ping():
+        try:
+            if worker_count() > 0:
+                messages.append("Worker ya estaba conectado.")
+            else:
+                settings.ensure_directories()
+                log_path = settings.logs_dir / "worker-local.log"
+                log = log_path.open("ab")
+                process = subprocess.Popen(
+                    [sys.executable, "-m", "app.rq_worker"],
+                    cwd=Path(__file__).resolve().parent.parent,
+                    env=os.environ.copy(),
+                    stdout=log,
+                    stderr=log,
+                    close_fds=True,
+                )
+                SERVICE_PROCESSES.append(process)
+                messages.append("Worker iniciado." if wait_until(lambda: worker_count() > 0) else "Worker lanzado; revisa logs si no aparece.")
+        except Exception as exc:
+            messages.append(f"No pude iniciar/verificar worker: {exc}")
+    return messages
 
 
 def job_prefill_from_request(request: Request) -> dict[str, object]:
@@ -408,6 +472,12 @@ def setup_reset(
         f"{result['deleted_templates']} plantillas borradas, "
         f"{result['cancelled_jobs']} jobs activos cancelados. {redis_text} {session_text}"
     )
+    return templates.TemplateResponse(request=request, name="setup.html", context=setup_context(request, message))
+
+
+@app.post("/setup/services/start", response_class=HTMLResponse)
+def setup_services_start(request: Request):
+    message = " ".join(start_local_services())
     return templates.TemplateResponse(request=request, name="setup.html", context=setup_context(request, message))
 
 
