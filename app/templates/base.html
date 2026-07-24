@@ -6,7 +6,7 @@
     <title>{{ title or "Telegram Downloader" }}</title>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="/static/js/app.js?v=13" defer></script>
-    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="/static/css/app.css?v=2">
   </head>
   <body>
     <div class="app-frame">
@@ -45,6 +45,20 @@
       <main class="shell">
         {% block content %}{% endblock %}
       </main>
+      <nav class="bottom-nav" aria-label="Navegación móvil">
+        <a class="{{ 'active' if request.url.path.startswith('/dashboard') else '' }}" href="/dashboard">Inicio</a>
+        <a class="{{ 'active' if request.url.path.startswith('/chats') else '' }}" href="/chats">Chats</a>
+        <a class="{{ 'active' if request.url.path.startswith('/jobs') else '' }}" href="/jobs">Jobs</a>
+        <a class="{{ 'active' if request.url.path.startswith('/search') else '' }}" href="/search">Buscar</a>
+        <a class="{{ 'active' if request.url.path.startswith('/setup') else '' }}" href="/setup">Setup</a>
+      </nav>
+      {% if request.url.path.startswith('/dashboard') %}
+      <a class="mobile-fab" href="/jobs">Nueva descarga</a>
+      {% elif request.url.path == '/chats' %}
+      <button class="mobile-fab" type="button" data-chats-url="/chats/list?refresh=true">Actualizar</button>
+      {% elif request.url.path == '/jobs' %}
+      <a class="mobile-fab" href="#new-job">Crear job</a>
+      {% endif %}
       <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
     </div>
   </body>
