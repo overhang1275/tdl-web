@@ -8,7 +8,6 @@ VENV_DIR="$APP_ROOT/venv"
 DATA_DIR="$APP_ROOT/data"
 ENV_DIR="/etc/telegram-downloader"
 ENV_FILE="$ENV_DIR/telegram-downloader.env"
-SUDOERS_FILE="/etc/sudoers.d/telegram-downloader-srm"
 DEFAULT_MEDIA_DIR="$DATA_DIR/downloads"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -50,7 +49,7 @@ get_env_value() {
 }
 
 apt-get update
-apt-get install -y python3 python3-venv python3-pip redis-server curl ca-certificates nginx rsync git secure-delete sudo
+apt-get install -y python3 python3-venv python3-pip redis-server curl ca-certificates nginx rsync git secure-delete
 
 if ! command -v tdl >/dev/null 2>&1; then
   echo "Installing tdl..."
@@ -109,10 +108,6 @@ set_env_value REDIS_URL "redis://127.0.0.1:6379/0"
 set_env_value TDL_BINARY "$(command -v tdl || echo /usr/local/bin/tdl)"
 set_env_value TDL_NAMESPACE default
 set_env_value COMMAND_TIMEOUT_SECONDS 7200
-
-SRM_PATH="$(command -v srm || echo /usr/bin/srm)"
-echo "$APP_USER ALL=(root) NOPASSWD: $SRM_PATH" > "$SUDOERS_FILE"
-chmod 440 "$SUDOERS_FILE"
 
 cp "$APP_DIR/deploy/systemd/telegram-downloader-web.service" /etc/systemd/system/telegram-downloader-web.service
 cp "$APP_DIR/deploy/systemd/telegram-downloader-worker.service" /etc/systemd/system/telegram-downloader-worker.service

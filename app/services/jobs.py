@@ -138,8 +138,6 @@ def retry_job(db: Session, job: DownloadJob) -> DownloadJob:
 
 
 def secure_delete_job(db: Session, job: DownloadJob) -> None:
-    if not shutil.which("sudo"):
-        raise DeleteJobError("sudo no está instalado.")
     if not shutil.which("srm"):
         raise DeleteJobError("secure-delete no está instalado: falta el binario srm.")
 
@@ -156,8 +154,8 @@ def secure_delete_job(db: Session, job: DownloadJob) -> None:
     if not path.is_dir():
         raise DeleteJobError(f"La ruta del job no es una carpeta: {path}")
 
-    command = ["sudo", "-n", "srm", "-vzr", str(path)]
-    append_job_log(job.id, f"Ejecutando: sudo srm -vzr {path}")
+    command = ["srm", "-vzr", str(path)]
+    append_job_log(job.id, f"Ejecutando: srm -vzr {path}")
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,

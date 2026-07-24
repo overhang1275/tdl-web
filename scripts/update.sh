@@ -7,7 +7,6 @@ APP_DIR="$APP_ROOT/app"
 VENV_DIR="$APP_ROOT/venv"
 DATA_DIR="$APP_ROOT/data"
 ENV_FILE="/etc/telegram-downloader/telegram-downloader.env"
-SUDOERS_FILE="/etc/sudoers.d/telegram-downloader-srm"
 SERVICES=(telegram-downloader-web telegram-downloader-worker)
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -28,12 +27,11 @@ PY
 }
 
 ensure_secure_delete() {
-  if ! command -v srm >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
+  if ! command -v srm >/dev/null 2>&1; then
     apt-get update
-    apt-get install -y secure-delete sudo
+    apt-get install -y secure-delete
   fi
-  echo "$APP_USER ALL=(root) NOPASSWD: $(command -v srm || echo /usr/bin/srm)" > "$SUDOERS_FILE"
-  chmod 440 "$SUDOERS_FILE"
+  rm -f /etc/sudoers.d/telegram-downloader-srm
 }
 
 env_value() {
