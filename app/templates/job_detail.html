@@ -36,12 +36,9 @@
   </div>
 
   <details class="cleanup-box">
-    <summary>Eliminar / limpiar datos</summary>
-    <form method="post" action="/jobs/{{ job.id }}/delete" class="cleanup-form">
-      <label class="check"><input name="delete_logs" type="checkbox" checked> Borrar logs</label>
-      <label class="check"><input name="delete_filtered" type="checkbox" checked> Borrar filtered-job</label>
-      <label class="check"><input name="delete_downloads" type="checkbox"> Borrar descargas de este job</label>
-      <button class="button danger" type="submit">Eliminar job</button>
+    <summary>Eliminar Job</summary>
+    <form method="post" action="/jobs/{{ job.id }}/delete" class="cleanup-form" onsubmit="return confirm('Eliminar Job #{{ job.id }} es irreversible. Se borrará la carpeta física con secure-delete. ¿Continuar?')">
+      <button class="button danger" type="submit">Eliminar Job</button>
     </form>
   </details>
 </section>

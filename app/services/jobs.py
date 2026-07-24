@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+
 from rq import Queue
 from rq.job import Job
 from redis.exceptions import RedisError
@@ -10,10 +13,16 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import DownloadJob, JobStage, JobStatus, MediaType
 from app.schemas import JobCreate
+from app.services.files import job_download_root
+from app.services.logs import append_job_log
 from app.services.paths import chat_path_key, safe_child
 
 
 class QueueUnavailableError(RuntimeError):
+    pass
+
+
+class DeleteJobError(RuntimeError):
     pass
 
 
@@ -125,6 +134,38 @@ def retry_job(db: Session, job: DownloadJob) -> DownloadJob:
         output_subfolder=job.output_subfolder,
     )
     return create_job(db, payload)
+
+
+def secure_delete_job(db: Session, job: DownloadJob) -> None:
+    if not shutil.which("srm"):
+        raise DeleteJobError("secure-delete no está instalado: falta el binario srm.")
+
+    try:
+        path = job_download_root(job.id, job.download_path).resolve()
+    except (OSError, ValueError) as exc:
+        raise DeleteJobError("La ruta del job no pertenece al directorio de descargas.") from exc
+
+    downloads_dir = settings.downloads_dir.resolve()
+    if path == downloads_dir or downloads_dir not in path.parents:
+        raise DeleteJobError("Ruta insegura: no pertenece al directorio de jobs.")
+    if not path.exists():
+        raise DeleteJobError(f"La carpeta del job no existe: {path}")
+    if not path.is_dir():
+        raise DeleteJobError(f"La ruta del job no es una carpeta: {path}")
+
+    result = subprocess.run(
+        ["srm", "--verbose", "--recursive", "--gutmann", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "srm falló sin detalle").strip()
+        raise DeleteJobError(detail)
+
+    append_job_log(job.id, f"Job eliminado con secure-delete: {path}")
+    db.delete(job)
+    db.commit()
 
 
 def queue_position(job: DownloadJob) -> int | None:

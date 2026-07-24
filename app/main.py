@@ -32,7 +32,7 @@ from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, 
 from app.services.errors import friendly_error
 from app.services.files import count_downloaded_files, directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
-from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job
+from app.services.jobs import DeleteJobError, QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, secure_delete_job
 from app.services.logs import job_events, job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child, sanitize_subfolder
 from app.services.search import global_search
@@ -1003,27 +1003,16 @@ def job_retry(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/jobs/{job_id}/delete")
-def job_delete(
-    job_id: int,
-    delete_logs: bool = Form(False),
-    delete_filtered: bool = Form(False),
-    delete_downloads: bool = Form(False),
-    db: Session = Depends(get_db),
-):
+def job_delete(job_id: int, db: Session = Depends(get_db)):
     job = get_job_or_404(db, job_id)
     if job.status in {JobStatus.pending, JobStatus.running}:
         cancel_job(db, job)
-    filtered_path = Path(job.filtered_json_path) if job.filtered_json_path else None
-    log_path = job_log_path(job.id)
-    download_root = job_download_root(job.id, job.download_path)
-    db.delete(job)
-    db.commit()
-    if delete_filtered and filtered_path:
-        filtered_path.unlink(missing_ok=True)
-    if delete_logs:
-        log_path.unlink(missing_ok=True)
-    if delete_downloads and download_root.exists():
-        shutil.rmtree(download_root, ignore_errors=True)
+    try:
+        secure_delete_job(db, job)
+    except DeleteJobError as exc:
+        job.error_message = f"No se eliminó el job: {exc}"
+        db.commit()
+        return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
     return RedirectResponse(url="/jobs", status_code=303)
 
 

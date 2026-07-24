@@ -26,6 +26,13 @@ print(secrets.token_urlsafe(32))
 PY
 }
 
+ensure_secure_delete() {
+  if ! command -v srm >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y secure-delete
+  fi
+}
+
 env_value() {
   [[ -f "$ENV_FILE" ]] || return 0
   grep -E "^$1=" "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true
@@ -154,6 +161,7 @@ start_services() {
   systemctl start "${SERVICES[@]}"
 }
 
+ensure_secure_delete
 ensure_web_password
 check_updates
 if [[ "$HAS_CHANGES" -eq 0 && "$PASSWORD_CHANGED" -eq 0 ]]; then

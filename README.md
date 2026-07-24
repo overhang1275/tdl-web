@@ -11,6 +11,7 @@ Aplicación FastAPI para convertir un flujo `tdl` basado en bash en una interfaz
 - Ejecuta exportación, filtrado JSON y descarga en segundo plano con Redis + RQ.
 - Guarda historial en SQLite.
 - Escribe logs por job.
+- Elimina jobs con `secure-delete` (`srm --recursive --gutmann`) antes de borrar el registro.
 - Muestra progreso con HTMX polling.
 - Explora archivos descargados desde la UI.
 
@@ -264,6 +265,7 @@ sudo systemctl start telegram-downloader-web telegram-downloader-worker
 ## Troubleshooting
 
 - `tdl binary not found`: ajusta `TDL_BINARY` en el env file.
+- `secure-delete no está instalado`: ejecuta `sudo apt install -y secure-delete` o vuelve a correr `sudo bash scripts/update.sh`.
 - Redis no disponible al crear jobs: confirma `sudo systemctl status redis-server`.
 - Sesión no detectada: ejecuta el login CLI como `telegramdl`.
 - Jobs quedan pending: revisa Redis y `telegram-downloader-worker`.

@@ -15,7 +15,12 @@
       <td><span class="pill status-{{ job.status.value }}">{{ job.status.value }}</span></td>
       <td>{{ job.total_filtered_messages }}</td>
       <td>{{ job.total_downloaded_files }}</td>
-      <td><a class="button small secondary" href="/jobs/{{ job.id }}">Abrir</a></td>
+      <td class="row-actions">
+        <a class="button small secondary" href="/jobs/{{ job.id }}">Abrir</a>
+        <form method="post" action="/jobs/{{ job.id }}/delete" onsubmit="return confirm('Eliminar Job #{{ job.id }} es irreversible. Se borrará la carpeta física con secure-delete. ¿Continuar?')">
+          <button class="button small danger" type="submit">Eliminar Job</button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
   </tbody>

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import app, health
 from app.main import apply_template_prefill, paginate_chats, paginate_downloads, start_local_services
@@ -10,6 +12,7 @@ from app.models import DownloadTemplate, MediaType
 from app.services.errors import friendly_error
 from app.services import chat_cache
 from app.config import settings
+from app.services.jobs import DeleteJobError, secure_delete_job
 from app.services.search import global_search
 
 
@@ -166,3 +169,57 @@ def test_friendly_error_detects_common_cases():
 
 def test_global_search_empty_query_returns_empty_groups():
     assert global_search(None, "   ") == {"chats": [], "jobs": [], "files": []}
+
+
+def test_secure_delete_job_uses_srm_before_db_delete(tmp_path, monkeypatch):
+    downloads = tmp_path / "downloads"
+    logs = tmp_path / "logs"
+    job_dir = downloads / "chat" / "job"
+    job_dir.mkdir(parents=True)
+    monkeypatch.setattr(settings, "downloads_dir", downloads)
+    monkeypatch.setattr(settings, "logs_dir", logs)
+    monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: "/usr/bin/srm")
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("app.services.jobs.subprocess.run", fake_run)
+
+    class FakeDb:
+        deleted = False
+        committed = False
+
+        def delete(self, job):
+            self.deleted = True
+
+        def commit(self):
+            self.committed = True
+
+    job = SimpleNamespace(id=7, download_path=str(job_dir))
+    db = FakeDb()
+
+    secure_delete_job(db, job)
+
+    assert calls[0][0] == ["srm", "--verbose", "--recursive", "--gutmann", str(job_dir.resolve())]
+    assert db.deleted is True
+    assert db.committed is True
+    assert "secure-delete" in (logs / "job-7.log").read_text()
+
+
+def test_secure_delete_job_keeps_db_when_srm_fails(tmp_path, monkeypatch):
+    downloads = tmp_path / "downloads"
+    job_dir = downloads / "chat" / "job"
+    job_dir.mkdir(parents=True)
+    monkeypatch.setattr(settings, "downloads_dir", downloads)
+    monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: "/usr/bin/srm")
+    monkeypatch.setattr(
+        "app.services.jobs.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr="denied"),
+    )
+    db = SimpleNamespace(delete=lambda job: pytest.fail("db.delete should not run"), commit=lambda: pytest.fail("commit should not run"))
+    job = SimpleNamespace(id=8, download_path=str(job_dir))
+
+    with pytest.raises(DeleteJobError, match="denied"):
+        secure_delete_job(db, job)
