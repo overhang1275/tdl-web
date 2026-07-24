@@ -150,7 +150,11 @@ def wipe_delete_job(db: Session, job: DownloadJob) -> None:
     if path == downloads_dir or downloads_dir not in path.parents:
         raise DeleteJobError("Ruta insegura: no pertenece al directorio de jobs.")
     if not path.exists():
-        raise DeleteJobError(f"La carpeta del job no existe: {path}")
+        append_job_log(job.id, f"La carpeta del job no existe, se elimina solo el registro: {path}")
+        append_deleted_job_log(job.id, f"registro eliminado; carpeta inexistente: {path}")
+        db.delete(job)
+        db.commit()
+        return
     if not path.is_dir():
         raise DeleteJobError(f"La ruta del job no es una carpeta: {path}")
 

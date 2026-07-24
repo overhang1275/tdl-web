@@ -239,6 +239,36 @@ def test_wipe_delete_job_keeps_db_when_wipe_fails(tmp_path, monkeypatch):
     assert "Job #8: falló eliminación segura" in (tmp_path / "logs" / "deleted-jobs.log").read_text()
 
 
+def test_wipe_delete_job_deletes_db_when_folder_is_missing(tmp_path, monkeypatch):
+    downloads = tmp_path / "downloads"
+    downloads.mkdir()
+    logs = tmp_path / "logs"
+    missing_dir = downloads / "chat" / "missing"
+    monkeypatch.setattr(settings, "downloads_dir", downloads)
+    monkeypatch.setattr(settings, "logs_dir", logs)
+    monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("app.services.jobs.subprocess.Popen", lambda *args, **kwargs: pytest.fail("wipe should not run"))
+
+    class FakeDb:
+        deleted = False
+        committed = False
+
+        def delete(self, job):
+            self.deleted = True
+
+        def commit(self):
+            self.committed = True
+
+    db = FakeDb()
+    job = SimpleNamespace(id=10, download_path=str(missing_dir))
+
+    wipe_delete_job(db, job)
+
+    assert db.deleted is True
+    assert db.committed is True
+    assert "carpeta inexistente" in (logs / "deleted-jobs.log").read_text()
+
+
 def test_job_delete_returns_before_wipe(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "logs_dir", tmp_path / "logs")
     job = SimpleNamespace(id=9, status=JobStatus.completed, stage=JobStage.completed, error_message=None)

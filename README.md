@@ -13,8 +13,26 @@ Aplicación FastAPI para convertir un flujo `tdl` basado en bash en una interfaz
 - Escribe logs por job.
 - Elimina jobs en background con `wipe` (`wipe -rfiq`) antes de borrar el registro, mostrando la salida en logs para evitar timeouts de túneles.
 - Registra eliminaciones y fallos en `/opt/tld-web/data/logs/deleted-jobs.log`.
+- Si la carpeta del job ya no existe, elimina solo el registro y deja rastro en logs.
 - Muestra progreso con HTMX polling.
 - Explora archivos descargados desde la UI.
+
+## Tecnologías y librerías
+
+- Python 3.12+.
+- FastAPI `0.136.3` para la aplicación web.
+- Uvicorn `0.34.0` como servidor ASGI.
+- Jinja2 `3.1.6` para templates HTML.
+- HTMX `1.9.12` para polling y actualizaciones parciales en la UI.
+- SQLAlchemy `2.0.50` con SQLite para persistencia local.
+- Redis `5.2.1` + RQ `2.0.0` para cola y worker de jobs.
+- Pydantic `2.13.4` para configuración/modelos de entrada.
+- python-multipart `0.0.20` para formularios.
+- `tdl` como CLI de Telegram.
+- `wipe` para borrado seguro de carpetas de jobs.
+- Nginx y systemd para despliegue en LXC Debian/Ubuntu.
+- Docker Compose opcional con Redis `7-alpine`.
+- pytest `8.3.4` y httpx `0.28.1` para pruebas.
 
 ## Rutas de datos
 
