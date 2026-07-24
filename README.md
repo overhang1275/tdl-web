@@ -46,7 +46,7 @@ Cuando creas un job desde `/jobs`, si ya existe `export.json` para ese chat, la 
 2. Ejecuta:
 
 ```bash
-sudo bash install.sh
+sudo bash scripts/install.sh
 ```
 
 El script instala Python, Redis, Nginx, `tdl`, crea el usuario `telegramdl`, crea el virtualenv, instala dependencias, copia systemd units y arranca los servicios. También pregunta dónde guardar media/descargas y qué contraseña usar para la web.
@@ -68,7 +68,7 @@ sudo systemctl restart telegram-downloader-web telegram-downloader-worker
 
 ## Instalar tdl
 
-`install.sh` instala `tdl` automáticamente con el instalador oficial:
+`scripts/install.sh` instala `tdl` automáticamente con el instalador oficial:
 
 ```bash
 curl -sSL https://docs.iyear.me/tdl/install.sh | sudo bash
@@ -236,6 +236,16 @@ Tests:
 ```bash
 pytest
 ```
+
+## Actualizar
+
+Desde el repo:
+
+```bash
+sudo bash scripts/update.sh
+```
+
+El script respalda la base SQLite antes de tocar la instalación, pregunta si también quieres respaldar descargas, trae cambios con `git pull --ff-only` si hay upstream configurado, copia el código, instala dependencias y reinicia web + worker. Los backups quedan en `/opt/tld-web/data/backups`.
 
 ## Backup
 

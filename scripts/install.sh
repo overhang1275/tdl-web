@@ -9,6 +9,8 @@ DATA_DIR="$APP_ROOT/data"
 ENV_DIR="/etc/telegram-downloader"
 ENV_FILE="$ENV_DIR/telegram-downloader.env"
 DEFAULT_MEDIA_DIR="$DATA_DIR/downloads"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run as root." >&2
@@ -101,7 +103,7 @@ rsync -a --delete \
   --exclude "data" \
   --exclude "*.sqlite3" \
   --exclude ".env" \
-  ./ "$APP_DIR/"
+  "$REPO_ROOT/" "$APP_DIR/"
 
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --upgrade pip wheel
