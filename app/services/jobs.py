@@ -154,7 +154,7 @@ def secure_delete_job(db: Session, job: DownloadJob) -> None:
         raise DeleteJobError(f"La ruta del job no es una carpeta: {path}")
 
     result = subprocess.run(
-        ["srm", "--verbose", "--recursive", "--gutmann", str(path)],
+        ["srm", "-v", "-r", str(path)],
         capture_output=True,
         text=True,
         check=False,

@@ -202,7 +202,7 @@ def test_secure_delete_job_uses_srm_before_db_delete(tmp_path, monkeypatch):
 
     secure_delete_job(db, job)
 
-    assert calls[0][0] == ["srm", "--verbose", "--recursive", "--gutmann", str(job_dir.resolve())]
+    assert calls[0][0] == ["srm", "-v", "-r", str(job_dir.resolve())]
     assert db.deleted is True
     assert db.committed is True
     assert "secure-delete" in (logs / "job-7.log").read_text()
