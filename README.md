@@ -49,7 +49,7 @@ Cuando creas un job desde `/jobs`, si ya existe `export.json` para ese chat, la 
 sudo bash scripts/install.sh
 ```
 
-El script instala Python, Redis, Nginx, `tdl`, crea el usuario `telegramdl`, crea el virtualenv, instala dependencias, copia systemd units y arranca los servicios. También pregunta dónde guardar media/descargas y qué contraseña usar para la web.
+El script instala Python, Redis, Nginx, `tdl`, crea el usuario `telegramdl`, crea el virtualenv, instala dependencias, copia systemd units y arranca los servicios. También pregunta dónde guardar media/descargas y genera una contraseña web robusta.
 
 Si necesitas cambiarlo después, edita `/etc/telegram-downloader/telegram-downloader.env`:
 
@@ -184,7 +184,7 @@ sudo systemctl reload nginx
 - No se aceptan rutas arbitrarias de usuario.
 - El servicio corre como usuario sin login `telegramdl`.
 - El `.env` debe quedar con permisos `640`, dueño `root:telegramdl`.
-- Si defines `WEB_PASSWORD`, la web pide Basic Auth. Déjalo vacío solo para uso estrictamente local.
+- En producción `WEB_PASSWORD` debe existir; `scripts/install.sh` lo genera automáticamente.
 
 ## API
 
@@ -245,7 +245,7 @@ Desde el repo:
 sudo bash scripts/update.sh
 ```
 
-El script respalda la base SQLite antes de tocar la instalación, pregunta si también quieres respaldar descargas, trae cambios con `git pull --ff-only` si hay upstream configurado, copia el código, instala dependencias y reinicia web + worker. Los backups quedan en `/opt/tld-web/data/backups`.
+El script respalda la base SQLite antes de tocar la instalación, pregunta si también quieres respaldar descargas, genera `WEB_PASSWORD` si falta, trae cambios con `git pull --ff-only` si hay upstream configurado, copia el código, instala dependencias y reinicia web + worker. Los backups quedan en `/opt/tld-web/data/backups`.
 
 ## Backup
 

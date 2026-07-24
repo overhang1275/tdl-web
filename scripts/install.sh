@@ -32,27 +32,6 @@ prompt_default() {
   printf '%s\n' "${value:-$default}"
 }
 
-prompt_password() {
-  local value=""
-  local confirm=""
-  while true; do
-    read -r -s -p "Password web (Enter genera una): " value
-    echo
-    if [[ -z "$value" ]]; then
-      printf '1\n'
-      random_value
-      return
-    fi
-    read -r -s -p "Confirma password web: " confirm
-    echo
-    if [[ "$value" == "$confirm" ]]; then
-      printf '0\n%s\n' "$value"
-      return
-    fi
-    echo "No coincide, intenta otra vez." >&2
-  done
-}
-
 set_env_value() {
   local key="$1"
   local value="$2"
@@ -77,17 +56,12 @@ if ! command -v tdl >/dev/null 2>&1; then
   curl -sSL https://docs.iyear.me/tdl/install.sh | bash
 fi
 
-PASSWORD_WAS_GENERATED=0
 if [[ -t 0 ]]; then
   MEDIA_DIR="$(prompt_default "Carpeta para media/descargas" "$DEFAULT_MEDIA_DIR")"
-  readarray -t PASSWORD_RESULT < <(prompt_password)
-  PASSWORD_WAS_GENERATED="${PASSWORD_RESULT[0]}"
-  WEB_PASSWORD="${PASSWORD_RESULT[1]}"
 else
   MEDIA_DIR="${DOWNLOADS_DIR:-$DEFAULT_MEDIA_DIR}"
-  WEB_PASSWORD="${WEB_PASSWORD:-$(random_value)}"
-  PASSWORD_WAS_GENERATED=1
 fi
+WEB_PASSWORD="$(random_value)"
 
 if ! id "$APP_USER" >/dev/null 2>&1; then
   useradd --system --home "$APP_ROOT" --shell /usr/sbin/nologin "$APP_USER"
@@ -153,8 +127,4 @@ echo "Installed. Open http://SERVER_IP:8000"
 echo "tdl binary: $(command -v tdl || true)"
 echo "app root: $APP_ROOT"
 echo "media dir: $MEDIA_DIR"
-if [[ "$PASSWORD_WAS_GENERATED" -eq 1 ]]; then
-  echo "generated web password: $WEB_PASSWORD"
-else
-  echo "web password saved in $ENV_FILE"
-fi
+echo "generated web password: $WEB_PASSWORD"

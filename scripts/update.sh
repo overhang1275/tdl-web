@@ -15,9 +15,42 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
+random_value() {
+  python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+}
+
 env_value() {
   [[ -f "$ENV_FILE" ]] || return 0
   grep -E "^$1=" "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true
+}
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  local escaped_value=""
+  escaped_value="$(printf '%s' "$value" | sed -e 's/[\/&|]/\\&/g')"
+  mkdir -p "$(dirname "$ENV_FILE")"
+  touch "$ENV_FILE"
+  chown root:"$APP_USER" "$ENV_FILE"
+  chmod 640 "$ENV_FILE"
+  if grep -q "^$key=" "$ENV_FILE"; then
+    sed -i "s|^$key=.*|$key=$escaped_value|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+ensure_web_password() {
+  local password=""
+  password="$(env_value WEB_PASSWORD)"
+  if [[ -z "$password" || "$password" == change-* ]]; then
+    password="$(random_value)"
+    set_env_value WEB_PASSWORD "$password"
+    echo "generated web password: $password"
+  fi
 }
 
 ask_yes_no() {
@@ -76,6 +109,7 @@ update_repo() {
 
 backup_before_update
 update_repo
+ensure_web_password
 
 rsync -a --delete \
   --exclude ".git" \
