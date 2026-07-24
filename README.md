@@ -11,7 +11,8 @@ Aplicación FastAPI para convertir un flujo `tdl` basado en bash en una interfaz
 - Ejecuta exportación, filtrado JSON y descarga en segundo plano con Redis + RQ.
 - Guarda historial en SQLite.
 - Escribe logs por job.
-- Elimina jobs con `secure-delete` (`srm -v -r`) antes de borrar el registro.
+- Elimina jobs en background con `secure-delete` (`srm -v -r`) antes de borrar el registro, evitando timeouts de túneles.
+- Registra eliminaciones y fallos en `/opt/tld-web/data/logs/deleted-jobs.log`.
 - Muestra progreso con HTMX polling.
 - Explora archivos descargados desde la UI.
 

@@ -11,10 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import SessionLocal
 from app.models import DownloadJob, JobStage, JobStatus, MediaType
 from app.schemas import JobCreate
 from app.services.files import job_download_root
-from app.services.logs import append_job_log
+from app.services.logs import append_deleted_job_log, append_job_log
 from app.services.paths import chat_path_key, safe_child
 
 
@@ -161,11 +162,29 @@ def secure_delete_job(db: Session, job: DownloadJob) -> None:
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "srm falló sin detalle").strip()
+        append_deleted_job_log(job.id, f"falló eliminación segura de {path}: {detail}")
         raise DeleteJobError(detail)
 
     append_job_log(job.id, f"Job eliminado con secure-delete: {path}")
+    append_deleted_job_log(job.id, f"eliminado con secure-delete: {path}")
     db.delete(job)
     db.commit()
+
+
+def secure_delete_job_by_id(job_id: int) -> None:
+    db = SessionLocal()
+    try:
+        job = db.get(DownloadJob, job_id)
+        if not job:
+            return
+        try:
+            secure_delete_job(db, job)
+        except DeleteJobError as exc:
+            job.error_message = f"No se eliminó el job: {exc}"
+            append_job_log(job.id, job.error_message)
+            db.commit()
+    finally:
+        db.close()
 
 
 def queue_position(job: DownloadJob) -> int | None:

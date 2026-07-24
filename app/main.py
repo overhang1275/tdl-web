@@ -13,7 +13,7 @@ import sys
 import time
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -26,14 +26,14 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db, init_db
-from app.models import DownloadJob, DownloadTemplate, JobStatus, MediaType
+from app.models import DownloadJob, DownloadTemplate, JobStage, JobStatus, MediaType
 from app.schemas import JobCreate
 from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, read_chats_cache, refresh_chats_cache
 from app.services.errors import friendly_error
 from app.services.files import count_downloaded_files, directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
-from app.services.jobs import DeleteJobError, QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, secure_delete_job
-from app.services.logs import job_events, job_log_path, read_job_log
+from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, secure_delete_job_by_id
+from app.services.logs import append_job_log, job_events, job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child, sanitize_subfolder
 from app.services.search import global_search
 from app.services.tdl import TdlError, TdlService
@@ -1003,16 +1003,16 @@ def job_retry(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/jobs/{job_id}/delete")
-def job_delete(job_id: int, db: Session = Depends(get_db)):
+def job_delete(job_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     job = get_job_or_404(db, job_id)
     if job.status in {JobStatus.pending, JobStatus.running}:
         cancel_job(db, job)
-    try:
-        secure_delete_job(db, job)
-    except DeleteJobError as exc:
-        job.error_message = f"No se eliminó el job: {exc}"
-        db.commit()
-        return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+    job.status = JobStatus.cancelled
+    job.stage = JobStage.cancelled
+    job.error_message = "Eliminación segura en progreso. La carpeta se está borrando con secure-delete."
+    append_job_log(job.id, job.error_message)
+    db.commit()
+    background_tasks.add_task(secure_delete_job_by_id, job_id)
     return RedirectResponse(url="/jobs", status_code=303)
 
 

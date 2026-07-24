@@ -13,7 +13,7 @@ window.addEventListener("submit", (event) => {
   }
   form.dataset.submitting = "true";
   button.dataset.originalText = button.textContent || "";
-  button.textContent = "Creando...";
+  button.textContent = form.dataset.submittingLabel || "Creando...";
   button.disabled = true;
 });
 

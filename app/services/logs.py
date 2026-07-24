@@ -32,6 +32,14 @@ def append_job_log(job_id: int, message: str) -> None:
         handle.write(f"[{timestamp}Z] {message.rstrip()}\n")
 
 
+def append_deleted_job_log(job_id: int, message: str) -> None:
+    settings.ensure_directories()
+    timestamp = datetime.utcnow().isoformat(timespec="seconds")
+    path = safe_child(settings.logs_dir, "deleted-jobs.log")
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{timestamp}Z] Job #{job_id}: {message.rstrip()}\n")
+
+
 def read_job_log(job_id: int, tail_bytes: int = 200_000) -> str:
     path = job_log_path(job_id)
     if not path.exists():

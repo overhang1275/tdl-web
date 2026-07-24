@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 import pytest
 
-from app.main import app, health
+from app.main import app, health, job_delete
 from app.main import apply_template_prefill, paginate_chats, paginate_downloads, start_local_services
-from app.models import DownloadTemplate, MediaType
+from app.models import DownloadTemplate, JobStage, JobStatus, MediaType
 from app.services.errors import friendly_error
 from app.services import chat_cache
 from app.config import settings
@@ -206,6 +206,7 @@ def test_secure_delete_job_uses_srm_before_db_delete(tmp_path, monkeypatch):
     assert db.deleted is True
     assert db.committed is True
     assert "secure-delete" in (logs / "job-7.log").read_text()
+    assert "Job #7: eliminado con secure-delete" in (logs / "deleted-jobs.log").read_text()
 
 
 def test_secure_delete_job_keeps_db_when_srm_fails(tmp_path, monkeypatch):
@@ -213,6 +214,7 @@ def test_secure_delete_job_keeps_db_when_srm_fails(tmp_path, monkeypatch):
     job_dir = downloads / "chat" / "job"
     job_dir.mkdir(parents=True)
     monkeypatch.setattr(settings, "downloads_dir", downloads)
+    monkeypatch.setattr(settings, "logs_dir", tmp_path / "logs")
     monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: "/usr/bin/srm")
     monkeypatch.setattr(
         "app.services.jobs.subprocess.run",
@@ -223,3 +225,32 @@ def test_secure_delete_job_keeps_db_when_srm_fails(tmp_path, monkeypatch):
 
     with pytest.raises(DeleteJobError, match="denied"):
         secure_delete_job(db, job)
+    assert "Job #8: falló eliminación segura" in (tmp_path / "logs" / "deleted-jobs.log").read_text()
+
+
+def test_job_delete_returns_before_secure_delete(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "logs_dir", tmp_path / "logs")
+    job = SimpleNamespace(id=9, status=JobStatus.completed, stage=JobStage.completed, error_message=None)
+
+    class FakeDb:
+        committed = False
+
+        def get(self, model, job_id):
+            return job
+
+        def commit(self):
+            self.committed = True
+
+    class FakeBackground:
+        tasks = []
+
+        def add_task(self, fn, *args):
+            self.tasks.append((fn, args))
+
+    background = FakeBackground()
+    response = job_delete(9, background, FakeDb())
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/jobs"
+    assert background.tasks[0][1] == (9,)
+    assert "Eliminación segura en progreso" in job.error_message
