@@ -7,12 +7,14 @@ Objetivo: modernizar la app con una capa visual estilo Material Design 3 Express
 - Mantener la estructura funcional actual: Dashboard, Chats, Jobs, Downloads, Setup, Notificaciones.
 - Priorizar movil: navegacion con pulgar, controles de minimo 48px, jerarquia clara y acciones primarias visibles.
 - Usar Material 3 / Material You: color vibrante, superficies claras, chips, FAB, cards, dialogs y barras de progreso.
+- Evitar bordes cortantes: preferir contornos difuminados, sombras suaves, hairlines con baja opacidad y radius organicos sin verse toscos.
 - Agregar motion sutil: transiciones cortas, estados pressed/hover, progreso animado y loading claro.
 - No crear dependencias nuevas salvo que sea estrictamente necesario.
 
 ## Fase 1: Base Visual
 
 - Definir tokens CSS: colores, superficies, radius variados, sombras suaves, spacing y tamanos tactiles.
+- Revisar radius y borders actuales: reducir esquinas demasiado pesadas y suavizar contornos con `rgba`, sombras ligeras o superficies tonales.
 - Ajustar tipografia: titulos mas expresivos, texto de tabla/lista mas legible, labels compactos.
 - Normalizar botones, pills, notices, panels y forms con lenguaje Material 3.
 - Agregar motion base: transiciones de botones, cards, progress bars y loading states.
@@ -123,12 +125,25 @@ Criterio de salida:
 - Notificaciones dejan de sentirse como pantalla separada.
 - Feedback de jobs completados/fallidos sigue funcionando.
 
-## Fase 10: QA Movil
+## Fase 10: Tablas Responsivas
+
+- Evitar scroll lateral como patron principal en movil.
+- Reemplazar tablas por listas/cards compactas en pantallas pequenas.
+- Mantener tablas completas en desktop.
+- Cada fila movil debe mostrar primero la informacion clave y luego acciones claras.
+- Usar chips, labels cortos y botones de 48px para acciones.
+- Aplicar a Chats, Jobs, Downloads, Notificaciones y cualquier tabla secundaria.
+
+Criterio de salida:
+- En movil no hace falta deslizar horizontalmente para encontrar acciones importantes.
+- La informacion sigue completa, pero ordenada por prioridad.
+
+## Fase 11: QA Movil
 
 - Revisar anchos pequenos: 320px, 375px, 430px.
 - Verificar que no haya textos cortados ni botones menores a 48px.
 - Revisar contraste de estados.
-- Revisar que bottom nav/FAB no tapen formularios, tablas o logs.
+- Revisar que bottom nav/FAB no tapen formularios, listas/cards moviles o logs.
 - Probar flujos:
   - login/setup.
   - actualizar cache de chats.

@@ -124,7 +124,7 @@ def system_status(tdl: TdlService | None = None) -> dict[str, object]:
         session_active = False
         session_error = str(exc)
     try:
-        redis = Redis.from_url(settings.redis_url)
+        redis = Redis.from_url(settings.redis_url, socket_connect_timeout=0.5, socket_timeout=0.5)
         redis.ping()
         redis_connected = True
         redis_error = None
@@ -156,14 +156,14 @@ def system_status(tdl: TdlService | None = None) -> dict[str, object]:
 
 def redis_ping() -> bool:
     try:
-        Redis.from_url(settings.redis_url).ping()
+        Redis.from_url(settings.redis_url, socket_connect_timeout=0.5, socket_timeout=0.5).ping()
         return True
     except RedisError:
         return False
 
 
 def worker_count() -> int:
-    redis = Redis.from_url(settings.redis_url)
+    redis = Redis.from_url(settings.redis_url, socket_connect_timeout=0.5, socket_timeout=0.5)
     return len(Worker.all(connection=redis))
 
 
@@ -456,13 +456,30 @@ def search_page(request: Request, q: str = "", db: Session = Depends(get_db)):
 
 
 @app.get("/notifications", response_class=HTMLResponse)
-def notifications_page(request: Request, db: Session = Depends(get_db)):
-    jobs = list_jobs(db)[:50]
+def notifications_page(request: Request, page: int = 1, per_page: int = 15, db: Session = Depends(get_db)):
+    per_page = per_page if per_page in (5, 15) else 15
+    all_jobs = list_jobs(db)
+    total = len(all_jobs)
+    page_count = max(1, (total + per_page - 1) // per_page)
+    page = min(max(page, 1), page_count)
+    start = (page - 1) * per_page
+    end = start + per_page
+    jobs = all_jobs[start:end]
     status = system_status()
+    pagination = {
+        "page": page,
+        "per_page": per_page,
+        "page_count": page_count,
+        "total": total,
+        "start": start + 1 if total else 0,
+        "end": min(end, total),
+        "has_prev": page > 1,
+        "has_next": page < page_count,
+    }
     return templates.TemplateResponse(
         request=request,
         name="notifications.html",
-        context={"jobs": jobs, "status": status},
+        context={"jobs": jobs, "status": status, "pagination": pagination},
     )
 
 

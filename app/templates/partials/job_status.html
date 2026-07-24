@@ -5,7 +5,10 @@
 {% if progress_percent > 100 %}{% set progress_percent = 100 %}{% endif %}
 <div class="progress-block">
   <div class="progress-row">
-    <span>Progreso aproximado</span>
+    <div>
+      <span>Progreso aproximado</span>
+      <span class="pill status-{{ job.status.value }}">{{ job.status.value }}</span>
+    </div>
     <strong>{{ "%.0f"|format(progress_percent) }}%</strong>
   </div>
   <div class="progress-bar" aria-label="Progreso aproximado">
@@ -15,6 +18,13 @@
     <span>{{ downloaded_count }} de {{ found_count }} encontrados</span>
     <span>{{ human_size(job.download_observed_bytes) }} descargados</span>
   </div>
+  <div class="progress-stats">
+    <div><span>Encontrados</span><strong>{{ found_count }}</strong></div>
+    <div><span>Descargados</span><strong>{{ downloaded_count }}</strong></div>
+    <div><span>Tamaño</span><strong>{{ human_size(job.download_observed_bytes) }}</strong></div>
+    <div><span>Velocidad</span><strong>{{ human_size(job.download_speed_bps) }}/s</strong></div>
+    <div><span>ETA</span><strong>{{ human_duration(job.download_eta_seconds) }}</strong></div>
+  </div>
 </div>
 <div class="status-grid">
   <div><span>Stage</span><strong>{{ job.stage.value }}</strong></div>
@@ -22,11 +32,6 @@
   <div><span>Cola</span><strong>{% if queue_position %}#{{ queue_position }}{% elif job.status.value == "pending" %}pendiente{% else %}-{% endif %}</strong></div>
   <div><span>Modo</span><strong>{{ "solo export" if job.export_only else "descarga" }}</strong></div>
   <div><span>Export</span><strong>{{ "actualiza" if job.refresh_export else "reutiliza" }}</strong></div>
-  <div><span>Archivos encontrados</span><strong>{{ found_count }}</strong></div>
-  <div><span>Archivos descargados</span><strong>{{ downloaded_count }}</strong></div>
-  <div><span>Tamaño</span><strong>{{ human_size(job.download_observed_bytes) }}</strong></div>
-  <div><span>Velocidad</span><strong>{{ human_size(job.download_speed_bps) }}/s</strong></div>
-  <div><span>ETA</span><strong>{{ human_duration(job.download_eta_seconds) }}</strong></div>
 </div>
 {% if queue_position and queue_position > 1 %}
 <div class="notice">Pendiente, {{ queue_position - 1 }} jobs antes que este.</div>

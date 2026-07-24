@@ -1,30 +1,51 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="page-head">
-  <div>
-    <h1>Dashboard</h1>
-    <p>Estado de sesión: <strong>{{ "activa" if logged_in else "pendiente" }}</strong></p>
+{% set dashboard_state = "ok" if logged_in and metrics.failed_jobs == 0 else ("warn" if logged_in else "bad") %}
+<section class="dashboard-hero {{ dashboard_state }}">
+  <div class="dashboard-hero-copy">
+    <span class="eyebrow">Dashboard</span>
+    <h1>
+      {% if dashboard_state == "ok" %}
+      Sistema listo
+      {% elif dashboard_state == "warn" %}
+      Requiere atención
+      {% else %}
+      Sesión pendiente
+      {% endif %}
+    </h1>
+    <p>
+      {% if dashboard_state == "ok" %}
+      Sesión activa, cola lista y sin fallos recientes.
+      {% elif dashboard_state == "warn" %}
+      Hay jobs fallidos esperando revisión.
+      {% else %}
+      Inicia sesión de Telegram/tdl antes de crear descargas.
+      {% endif %}
+    </p>
   </div>
-  <a class="button" href="/jobs">Nueva descarga</a>
+  <div class="dashboard-hero-actions">
+    <span class="pill status-{{ 'completed' if logged_in else 'pending' }}">sesión {{ "activa" if logged_in else "pendiente" }}</span>
+    <a class="button" href="/jobs">Nueva descarga</a>
+  </div>
 </section>
 
-<section class="metric-grid">
-  <article class="metric-card">
+<section class="metric-grid dashboard-metrics">
+  <article class="metric-card metric-active">
     <span>Activos</span>
     <strong>{{ metrics.active_jobs }}</strong>
     <small>pending / running</small>
   </article>
-  <article class="metric-card">
+  <article class="metric-card metric-failed">
     <span>Fallidos</span>
     <strong>{{ metrics.failed_jobs }}</strong>
     <small>requieren revisión</small>
   </article>
-  <article class="metric-card">
+  <article class="metric-card metric-files">
     <span>Archivos</span>
     <strong>{{ metrics.downloaded_files }}</strong>
     <small>registrados en jobs</small>
   </article>
-  <article class="metric-card">
+  <article class="metric-card metric-disk">
     <span>Disco usado</span>
     <strong>{{ metrics.disk_usage }}</strong>
     <small>carpeta downloads</small>
@@ -60,7 +81,6 @@
   </article>
 </section>
 
-{% if metrics.latest_errors %}
 <section class="panel">
   <div class="section-title">
     <div>
@@ -68,17 +88,25 @@
       <p>Fallos recientes para reintentar o limpiar.</p>
     </div>
   </div>
+  {% if metrics.latest_errors %}
   <div class="error-list">
     {% for job in metrics.latest_errors %}
     {% set error_info = friendly_error(job.error_message) %}
     <a href="/jobs/{{ job.id }}" class="error-item">
+      <span class="pill status-failed">falló</span>
       <strong>#{{ job.id }} · {{ job.chat_title or job.chat_id }}</strong>
-      <span>{{ error_info.title }} · {{ error_info.detail }}</span>
+      <span>{{ error_info.title }}</span>
+      <small>{{ error_info.detail }}</small>
     </a>
     {% endfor %}
   </div>
+  {% else %}
+  <div class="empty-state compact">
+    <strong>Sin errores recientes.</strong>
+    <p>Cuando un job falle, aparecerá aquí con acceso directo al detalle.</p>
+  </div>
+  {% endif %}
 </section>
-{% endif %}
 
 <section class="panel">
   <div class="section-title">

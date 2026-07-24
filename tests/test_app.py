@@ -49,6 +49,17 @@ def test_web_password_protects_non_health_routes(monkeypatch):
     assert client.get("/health").status_code == 200
 
 
+def test_notifications_page_handles_redis_down(monkeypatch):
+    monkeypatch.setattr(settings, "web_password", None)
+    monkeypatch.setattr("app.main.Redis.from_url", lambda *args, **kwargs: (_ for _ in ()).throw(Exception("redis down")))
+    monkeypatch.setattr("app.services.tdl.TdlService.is_logged_in", lambda self: False)
+
+    response = TestClient(app).get("/notifications?per_page=5")
+
+    assert response.status_code == 200
+    assert "Notificaciones" in response.text
+
+
 def test_start_local_services_does_nothing_when_ready(monkeypatch):
     monkeypatch.setattr("app.main.redis_ping", lambda: True)
     monkeypatch.setattr("app.main.worker_count", lambda: 1)

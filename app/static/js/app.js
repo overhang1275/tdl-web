@@ -31,6 +31,21 @@ window.addEventListener("pageshow", () => {
 });
 
 (() => {
+  const page = document.querySelector("[data-notifications-page]");
+  if (!page) {
+    return;
+  }
+  const wanted = window.matchMedia("(max-width: 860px)").matches ? "5" : "15";
+  const params = new URLSearchParams(window.location.search);
+  if ((params.get("per_page") || page.dataset.perPage) === wanted) {
+    return;
+  }
+  params.set("per_page", wanted);
+  params.set("page", "1");
+  window.location.replace(`/notifications?${params.toString()}`);
+})();
+
+(() => {
   const panelSelector = "#chats-panel";
   let searchTimer = 0;
   let chatsRequestId = 0;

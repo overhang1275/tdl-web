@@ -7,45 +7,33 @@
   </div>
 </section>
 
-<section class="panel">
+<section class="panel" data-notifications-page data-per-page="{{ pagination.per_page }}">
   <div class="section-title">
     <div>
       <h2>Servicios</h2>
       <p>Estado actual de las piezas necesarias para descargar.</p>
     </div>
   </div>
-  <table>
-    <thead><tr><th>Servicio</th><th>Estado</th><th>Detalle</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><strong>Redis</strong></td>
-        <td>
-          <span class="pill {{ "status-completed" if status.redis_connected else "status-failed" }}">
-            {{ "conectado" if status.redis_connected else "error" }}
-          </span>
-        </td>
-        <td>{{ status.redis_error or status.redis_url }}</td>
-      </tr>
-      <tr>
-        <td><strong>Worker</strong></td>
-        <td>
-          <span class="pill {{ "status-completed" if status.worker_connected else "status-failed" }}">
-            {{ status.worker_count }} {{ "activo" if status.worker_count == 1 else "activos" }}
-          </span>
-        </td>
-        <td>{{ "Listo para procesar jobs" if status.worker_connected else "No hay workers conectados" }}</td>
-      </tr>
-      <tr>
-        <td><strong>Sesión</strong></td>
-        <td>
-          <span class="pill {{ "status-completed" if status.session_active else "status-failed" }}">
-            {{ "activa" if status.session_active else "pendiente" }}
-          </span>
-        </td>
-        <td>{{ status.session_error or status.storage }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="health-grid setup-checklist">
+    <div class="health-card {{ 'ok' if status.redis_connected else 'bad' }}">
+      <span>Redis</span>
+      <strong>{{ "conectado" if status.redis_connected else "error" }}</strong>
+      <small class="status-label">{{ "listo" if status.redis_connected else "revisar" }}</small>
+      <small>{{ status.redis_error or status.redis_url }}</small>
+    </div>
+    <div class="health-card {{ 'ok' if status.worker_connected else 'bad' }}">
+      <span>Worker</span>
+      <strong>{{ status.worker_count }} {{ "activo" if status.worker_count == 1 else "activos" }}</strong>
+      <small class="status-label">{{ "listo" if status.worker_connected else "iniciar" }}</small>
+      <small>{{ "Listo para procesar jobs" if status.worker_connected else "No hay workers conectados" }}</small>
+    </div>
+    <div class="health-card {{ 'ok' if status.session_active else 'bad' }}">
+      <span>Sesión</span>
+      <strong>{{ "activa" if status.session_active else "pendiente" }}</strong>
+      <small class="status-label">{{ "listo" if status.session_active else "login" }}</small>
+      <small>{{ status.session_error or status.storage }}</small>
+    </div>
+  </div>
 </section>
 
 <section class="panel">
@@ -56,33 +44,59 @@
     </div>
   </div>
   {% if jobs %}
-  <table>
-    <thead><tr><th>Job</th><th>Chat</th><th>Stage</th><th>Status</th><th>Fecha</th><th>Mensaje</th><th></th></tr></thead>
-    <tbody>
+  <div class="pagination notification-pagination">
+    <span class="pagination-summary">
+      Mostrando {{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }}
+    </span>
+    <div class="pagination-actions">
+      {% if pagination.has_prev %}
+      <a class="button small secondary" href="/notifications?page={{ pagination.page - 1 }}&per_page={{ pagination.per_page }}">Anterior</a>
+      {% endif %}
+      <span class="pill">Página {{ pagination.page }} / {{ pagination.page_count }}</span>
+      {% if pagination.has_next %}
+      <a class="button small secondary" href="/notifications?page={{ pagination.page + 1 }}&per_page={{ pagination.per_page }}">Siguiente</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="notification-list">
     {% for job in jobs %}
       {% set error_info = friendly_error(job.error_message) if job.error_message else none %}
-      <tr>
-        <td><strong>#{{ job.id }}</strong></td>
-        <td>
+      <article class="notification-item">
+        <div>
+          <span class="muted-line">Job #{{ job.id }} · {{ job.finished_at.strftime("%Y-%m-%d %H:%M") if job.finished_at else "en curso" }}</span>
           <strong>{{ job.chat_title or job.chat_id }}</strong>
           {% if job.chat_title %}<small class="muted-line">{{ job.chat_id }}</small>{% endif %}
-        </td>
-        <td><span class="pill">{{ job.stage.value }}</span></td>
-        <td><span class="pill status-{{ job.status.value }}">{{ job.status.value }}</span></td>
-        <td>{{ job.finished_at.strftime("%Y-%m-%d %H:%M") if job.finished_at else "en curso" }}</td>
-        <td>
+        </div>
+        <div class="notification-state">
+          <span class="pill status-{{ job.status.value }}">{{ job.status.value }}</span>
+          <span class="pill">{{ job.stage.value }}</span>
+        </div>
+        <div class="notification-message">
           {% if error_info %}
           <strong>{{ error_info.title }}</strong>
           <small class="muted-line">{{ error_info.detail }}</small>
           {% else %}
           <span class="muted-line">{{ "Finalizado correctamente" if job.status.value == "completed" else "Sin errores recientes" }}</span>
           {% endif %}
-        </td>
-        <td><a class="button small secondary" href="/jobs/{{ job.id }}">Abrir</a></td>
-      </tr>
+        </div>
+        <a class="button small secondary" href="/jobs/{{ job.id }}">Abrir</a>
+      </article>
     {% endfor %}
-    </tbody>
-  </table>
+  </div>
+  <div class="pagination notification-pagination">
+    <span class="pagination-summary">
+      Mostrando {{ pagination.start }}-{{ pagination.end }} de {{ pagination.total }}
+    </span>
+    <div class="pagination-actions">
+      {% if pagination.has_prev %}
+      <a class="button small secondary" href="/notifications?page={{ pagination.page - 1 }}&per_page={{ pagination.per_page }}">Anterior</a>
+      {% endif %}
+      <span class="pill">Página {{ pagination.page }} / {{ pagination.page_count }}</span>
+      {% if pagination.has_next %}
+      <a class="button small secondary" href="/notifications?page={{ pagination.page + 1 }}&per_page={{ pagination.per_page }}">Siguiente</a>
+      {% endif %}
+    </div>
+  </div>
   {% else %}
   <div class="empty-state">
     <strong>Sin actividad todavía.</strong>

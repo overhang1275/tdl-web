@@ -73,8 +73,9 @@
 
   <div class="download-gallery">
     {% for file in files %}
-    <article class="download-card">
+    <article class="download-card download-kind-{{ file.kind }}">
       <div class="download-preview">
+        <span class="download-kind-pill">{{ file.kind }}</span>
         {% if file.kind == "image" %}
         <a href="/downloads/{{ job.id }}/preview?path={{ file.relative_path|urlencode }}" aria-label="Ver {{ file.name }}">
           <img src="/downloads/{{ job.id }}/file?path={{ file.relative_path|urlencode }}" alt="{{ file.name }}" loading="lazy">

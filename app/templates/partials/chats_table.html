@@ -104,6 +104,30 @@
     {% endfor %}
   </tbody>
 </table>
+<div class="chat-card-list" aria-label="Chats">
+  {% for chat in chats %}
+  <article class="chat-card">
+    <div class="chat-card-main">
+      <div>
+        <strong>{{ chat.title or chat.visible_name or "Sin nombre" }}</strong>
+        <small class="muted-line">
+          <code>{{ chat.id }}</code>
+          {% if chat.username %}<span>@{{ chat.username }}</span>{% endif %}
+        </small>
+      </div>
+      <span class="pill chat-type-{{ chat.type or 'chat' }}">{{ chat.type or "chat" }}</span>
+    </div>
+    <div class="chat-card-meta">
+      <span>Topics</span>
+      <strong>{{ chat.topics_count or 0 }}</strong>
+    </div>
+    <div class="chat-card-actions">
+      <a class="button small secondary" href="/chats/{{ chat.id | urlencode }}">Perfil</a>
+      <a class="button small" href="/jobs?chat_id={{ chat.id | urlencode }}&chat_title={{ (chat.title or chat.visible_name or '') | urlencode }}">Crear job</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
 <div class="pagination">
   <div class="pagination-summary">Página {{ pagination.page }} de {{ pagination.page_count }}</div>
   <div class="pagination-actions">
