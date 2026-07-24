@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from fastapi.testclient import TestClient
 
 from app.main import app, health
@@ -7,6 +9,7 @@ from app.main import apply_template_prefill, paginate_chats, paginate_downloads,
 from app.models import DownloadTemplate, MediaType
 from app.services.errors import friendly_error
 from app.services import chat_cache
+from app.config import settings
 from app.services.search import global_search
 
 
@@ -23,13 +26,24 @@ def test_security_headers_are_set():
     assert response.headers["referrer-policy"] == "same-origin"
 
 
-def test_cross_origin_writes_are_blocked():
+def test_cross_origin_writes_are_blocked(monkeypatch):
+    monkeypatch.setattr(settings, "web_password", None)
     response = TestClient(app).post(
         "/setup/login/cancel",
         headers={"host": "127.0.0.1:8000", "origin": "https://example.com"},
     )
 
     assert response.status_code == 403
+
+
+def test_web_password_protects_non_health_routes(monkeypatch):
+    monkeypatch.setattr(settings, "web_password", "secret")
+    client = TestClient(app)
+    token = base64.b64encode(b"user:secret").decode()
+
+    assert client.get("/chats").status_code == 401
+    assert client.get("/chats", headers={"authorization": f"Basic {token}"}).status_code == 200
+    assert client.get("/health").status_code == 200
 
 
 def test_start_local_services_does_nothing_when_ready(monkeypatch):

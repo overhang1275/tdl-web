@@ -4,6 +4,20 @@ import os
 from pathlib import Path
 
 
+def load_env_file(path: Path = Path(".env")) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+
+
+load_env_file()
+
+
 class Settings:
     app_name: str = "Telegram Downloader"
     environment: str
@@ -18,6 +32,7 @@ class Settings:
     tdl_binary: str
     tdl_namespace: str
     command_timeout_seconds: int
+    web_password: str | None
 
     def __init__(self) -> None:
         self.environment = os.getenv("APP_ENV", "development")
@@ -32,6 +47,7 @@ class Settings:
         self.tdl_binary = os.getenv("TDL_BINARY", "tdl")
         self.tdl_namespace = os.getenv("TDL_NAMESPACE", "default")
         self.command_timeout_seconds = int(os.getenv("COMMAND_TIMEOUT_SECONDS", "7200"))
+        self.web_password = os.getenv("WEB_PASSWORD") or None
 
     def ensure_directories(self) -> None:
         for path in (self.base_dir, self.sessions_dir, self.exports_dir, self.downloads_dir, self.logs_dir):
@@ -39,4 +55,3 @@ class Settings:
 
 
 settings = Settings()
-

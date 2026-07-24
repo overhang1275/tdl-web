@@ -18,24 +18,24 @@ Aplicación FastAPI para convertir un flujo `tdl` basado en bash en una interfaz
 
 Por defecto en producción:
 
-- `/opt/telegram-downloader/app`
-- `/opt/telegram-downloader/venv`
-- `/opt/telegram-downloader/data/sessions`
-- `/opt/telegram-downloader/data/exports`
-- `/opt/telegram-downloader/data/downloads`
-- `/opt/telegram-downloader/data/logs`
+- `/opt/tld-web/app`
+- `/opt/tld-web/venv`
+- `/opt/tld-web/data/sessions`
+- `/opt/tld-web/data/exports`
+- `/opt/tld-web/data/downloads`
+- `/opt/tld-web/data/logs`
 - `/etc/telegram-downloader/telegram-downloader.env`
 
 Los exports se guardan por chat:
 
 ```text
-/opt/telegram-downloader/data/exports/<chat_id>/export.json
+/opt/tld-web/data/exports/<chat_id>/export.json
 ```
 
 Cada job genera su propio filtrado:
 
 ```text
-/opt/telegram-downloader/data/exports/<chat_id>/filtered-job-<job_id>.json
+/opt/tld-web/data/exports/<chat_id>/filtered-job-<job_id>.json
 ```
 
 Cuando creas un job desde `/jobs`, si ya existe `export.json` para ese chat, la UI pregunta si quieres actualizarlo. Si no marcas esa opción, el job reutiliza el export existente y solo vuelve a filtrar/descargar.
@@ -49,12 +49,14 @@ Cuando creas un job desde `/jobs`, si ya existe `export.json` para ese chat, la 
 sudo bash install.sh
 ```
 
-El script instala Python, Redis, Nginx, `tdl`, crea el usuario `telegramdl`, crea el virtualenv, instala dependencias, copia systemd units y arranca los servicios.
+El script instala Python, Redis, Nginx, `tdl`, crea el usuario `telegramdl`, crea el virtualenv, instala dependencias, copia systemd units y arranca los servicios. También pregunta dónde guardar media/descargas y qué contraseña usar para la web.
 
-Edita `/etc/telegram-downloader/telegram-downloader.env` y ajusta:
+Si necesitas cambiarlo después, edita `/etc/telegram-downloader/telegram-downloader.env`:
 
 ```bash
 SECRET_KEY=...
+WEB_PASSWORD=...
+DOWNLOADS_DIR=/opt/tld-web/data/downloads
 TDL_BINARY=/usr/local/bin/tdl
 ```
 
@@ -140,13 +142,13 @@ docker compose up -d
 La página `/setup` detecta si hay sesión activa y muestra el comando exacto para inicializarla. En `tdl 0.20.x`, el login es interactivo (`desktop`, `code` o `qr`) y no expone flags simples tipo `--phone --code --password`, así que debe inicializarse una sola vez por CLI:
 
 ```bash
-sudo -u telegramdl HOME=/opt/telegram-downloader/data/sessions \
+sudo -u telegramdl HOME=/opt/tld-web/data/sessions \
   /usr/local/bin/tdl --ns default \
-  --storage type=bolt,path=/opt/telegram-downloader/data/sessions/tdl-data \
+  --storage type=bolt,path=/opt/tld-web/data/sessions/tdl-data \
   login --type code
 ```
 
-Después vuelve a `/setup`. La sesión debe aparecer activa y quedará persistida en `/opt/telegram-downloader/data/sessions`.
+Después vuelve a `/setup`. La sesión debe aparecer activa y quedará persistida en `/opt/tld-web/data/sessions`.
 
 ## Servicios
 
@@ -182,6 +184,7 @@ sudo systemctl reload nginx
 - No se aceptan rutas arbitrarias de usuario.
 - El servicio corre como usuario sin login `telegramdl`.
 - El `.env` debe quedar con permisos `640`, dueño `root:telegramdl`.
+- Si defines `WEB_PASSWORD`, la web pide Basic Auth. Déjalo vacío solo para uso estrictamente local.
 
 ## API
 
@@ -241,10 +244,10 @@ Detén los servicios o haz snapshot del LXC:
 ```bash
 sudo systemctl stop telegram-downloader-web telegram-downloader-worker
 sudo tar -czf telegram-downloader-backup.tgz \
-  /opt/telegram-downloader/data/telegram_downloader.sqlite3 \
-  /opt/telegram-downloader/data/sessions \
-  /opt/telegram-downloader/data/downloads \
-  /opt/telegram-downloader/data/exports
+  /opt/tld-web/data/telegram_downloader.sqlite3 \
+  /opt/tld-web/data/sessions \
+  /opt/tld-web/data/downloads \
+  /opt/tld-web/data/exports
 sudo systemctl start telegram-downloader-web telegram-downloader-worker
 ```
 
@@ -254,5 +257,5 @@ sudo systemctl start telegram-downloader-web telegram-downloader-worker
 - Redis no disponible al crear jobs: confirma `sudo systemctl status redis-server`.
 - Sesión no detectada: ejecuta el login CLI como `telegramdl`.
 - Jobs quedan pending: revisa Redis y `telegram-downloader-worker`.
-- Errores de permisos: confirma dueño `telegramdl:telegramdl` en `/opt/telegram-downloader`.
+- Errores de permisos: confirma dueño `telegramdl:telegramdl` en `/opt/tld-web`.
 - Nginx devuelve 502: revisa `systemctl status telegram-downloader-web`.

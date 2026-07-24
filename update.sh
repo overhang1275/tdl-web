@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_USER="telegramdl"
-APP_ROOT="/opt/telegram-downloader"
+APP_ROOT="${APP_ROOT:-/opt/tld-web}"
 APP_DIR="$APP_ROOT/app"
 VENV_DIR="$APP_ROOT/venv"
 

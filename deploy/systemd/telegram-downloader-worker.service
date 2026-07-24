@@ -6,9 +6,9 @@ Wants=redis-server.service
 [Service]
 User=telegramdl
 Group=telegramdl
-WorkingDirectory=/opt/telegram-downloader/app
+WorkingDirectory=/opt/tld-web/app
 EnvironmentFile=/etc/telegram-downloader/telegram-downloader.env
-ExecStart=/opt/telegram-downloader/venv/bin/python -m app.rq_worker
+ExecStart=/opt/tld-web/venv/bin/python -m app.rq_worker
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
@@ -16,4 +16,3 @@ PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
-

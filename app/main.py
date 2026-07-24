@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import base64
 from datetime import date, datetime
 import mimetypes
 import os
 from pathlib import Path
+import secrets
 import shutil
 import subprocess
 import sys
@@ -56,6 +58,20 @@ UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 SERVICE_PROCESSES: list[subprocess.Popen] = []
 
 
+def basic_auth_ok(request: Request) -> bool:
+    if not settings.web_password or request.url.path == "/health":
+        return True
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() != "basic" or not token:
+        return False
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+    except Exception:
+        return False
+    _, _, password = decoded.partition(":")
+    return secrets.compare_digest(password, settings.web_password)
+
+
 def same_origin_request(request: Request) -> bool:
     host = request.headers.get("host", "")
     for header in ("origin", "referer"):
@@ -70,6 +86,8 @@ def same_origin_request(request: Request) -> bool:
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
+    if not basic_auth_ok(request):
+        return PlainTextResponse("Authentication required.", status_code=401, headers={"WWW-Authenticate": 'Basic realm="tdl-web"'})
     if request.method in UNSAFE_METHODS and not same_origin_request(request):
         return PlainTextResponse("Cross-origin writes are blocked.", status_code=403)
     response = await call_next(request)
