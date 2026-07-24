@@ -245,7 +245,7 @@ Desde el repo:
 sudo bash scripts/update.sh
 ```
 
-El script respalda la base SQLite antes de tocar la instalación, pregunta si también quieres respaldar descargas, genera `WEB_PASSWORD` si falta, trae cambios con `git pull --ff-only` si hay upstream configurado, copia el código, instala dependencias y reinicia web + worker. Los backups quedan en `/opt/tld-web/data/backups`.
+El script revisa cambios en el repo instalado (`/opt/tld-web/app`), sale sin detener servicios si no hay nada nuevo, detiene web + worker cuando sí hay update, respalda la base SQLite, pregunta si también quieres respaldar descargas, genera `WEB_PASSWORD` si falta, aplica `git pull --ff-only` o copia los archivos actuales, instala dependencias y vuelve a iniciar los servicios. Los backups quedan en `/opt/tld-web/data/backups`.
 
 ## Backup
 

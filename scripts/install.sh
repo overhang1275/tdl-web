@@ -49,7 +49,7 @@ get_env_value() {
 }
 
 apt-get update
-apt-get install -y python3 python3-venv python3-pip redis-server curl ca-certificates nginx rsync
+apt-get install -y python3 python3-venv python3-pip redis-server curl ca-certificates nginx rsync git
 
 if ! command -v tdl >/dev/null 2>&1; then
   echo "Installing tdl..."
@@ -69,7 +69,6 @@ fi
 
 mkdir -p "$APP_DIR" "$DATA_DIR/sessions" "$DATA_DIR/exports" "$MEDIA_DIR" "$DATA_DIR/logs" "$ENV_DIR"
 rsync -a --delete \
-  --exclude ".git" \
   --exclude ".venv" \
   --exclude "venv" \
   --exclude "__pycache__" \
@@ -78,6 +77,9 @@ rsync -a --delete \
   --exclude "*.sqlite3" \
   --exclude ".env" \
   "$REPO_ROOT/" "$APP_DIR/"
+if [[ -d "$APP_DIR/.git" ]]; then
+  git config --global --add safe.directory "$APP_DIR"
+fi
 
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --upgrade pip wheel

@@ -7,8 +7,12 @@ APP_DIR="$APP_ROOT/app"
 VENV_DIR="$APP_ROOT/venv"
 DATA_DIR="$APP_ROOT/data"
 ENV_FILE="/etc/telegram-downloader/telegram-downloader.env"
+SERVICES=(telegram-downloader-web telegram-downloader-worker)
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+UPDATE_MODE="copy"
+HAS_CHANGES=1
+PASSWORD_CHANGED=0
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run as root." >&2
@@ -49,6 +53,7 @@ ensure_web_password() {
   if [[ -z "$password" || "$password" == change-* ]]; then
     password="$(random_value)"
     set_env_value WEB_PASSWORD "$password"
+    PASSWORD_CHANGED=1
     echo "generated web password: $password"
   fi
 }
@@ -90,29 +95,46 @@ backup_before_update() {
   fi
 }
 
-update_repo() {
-  if [[ ! -d "$REPO_ROOT/.git" ]]; then
-    echo "No git repo found, using current files."
+check_updates() {
+  if [[ -d "$APP_DIR/.git" ]]; then
+    UPDATE_MODE="git"
+    git config --global --add safe.directory "$APP_DIR"
+    git -C "$APP_DIR" fetch --quiet
+    if ! git -C "$APP_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+      if [[ "$REPO_ROOT" == "$APP_DIR" ]]; then
+        echo "No upstream configured in $APP_DIR."
+        HAS_CHANGES=0
+        return
+      fi
+      echo "No upstream configured in $APP_DIR, updating with current files."
+      UPDATE_MODE="copy"
+      return
+    fi
+    if [[ "$(git -C "$APP_DIR" rev-parse HEAD)" == "$(git -C "$APP_DIR" rev-parse '@{u}')" ]]; then
+      HAS_CHANGES=0
+    fi
     return
   fi
-  git -C "$REPO_ROOT" fetch --quiet
-  if ! git -C "$REPO_ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-    echo "No upstream configured, using current branch."
-    return
-  fi
-  if [[ "$(git -C "$REPO_ROOT" rev-parse HEAD)" != "$(git -C "$REPO_ROOT" rev-parse '@{u}')" ]]; then
-    git -C "$REPO_ROOT" pull --ff-only
+
+  if [[ -d "$REPO_ROOT/.git" ]]; then
+    git config --global --add safe.directory "$REPO_ROOT"
+    git -C "$REPO_ROOT" fetch --quiet
+    if git -C "$REPO_ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 &&
+      [[ "$(git -C "$REPO_ROOT" rev-parse HEAD)" == "$(git -C "$REPO_ROOT" rev-parse '@{u}')" ]]; then
+      HAS_CHANGES=0
+    fi
   else
-    echo "Repo already up to date."
+    echo "No git repo found, updating with current files."
   fi
 }
 
-backup_before_update
-update_repo
-ensure_web_password
+apply_update() {
+  if [[ "$UPDATE_MODE" == "git" ]]; then
+    git -C "$APP_DIR" pull --ff-only
+    return
+  fi
 
-rsync -a --delete \
-  --exclude ".git" \
+  rsync -a --delete \
   --exclude ".venv" \
   --exclude "venv" \
   --exclude "__pycache__" \
@@ -121,8 +143,30 @@ rsync -a --delete \
   --exclude "*.sqlite3" \
   --exclude ".env" \
   "$REPO_ROOT/" "$APP_DIR/"
+}
+
+stop_services() {
+  systemctl stop "${SERVICES[@]}"
+}
+
+start_services() {
+  systemctl daemon-reload
+  systemctl start "${SERVICES[@]}"
+}
+
+ensure_web_password
+check_updates
+if [[ "$HAS_CHANGES" -eq 0 && "$PASSWORD_CHANGED" -eq 0 ]]; then
+  echo "No hay actualizaciones disponibles."
+  exit 0
+fi
+
+stop_services
+trap start_services EXIT
+backup_before_update
+apply_update
 "$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
 chown -R "$APP_USER:$APP_USER" "$APP_ROOT"
-systemctl daemon-reload
-systemctl restart telegram-downloader-web telegram-downloader-worker
+start_services
+trap - EXIT
 echo "Updated."
