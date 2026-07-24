@@ -26,12 +26,12 @@ print(secrets.token_urlsafe(32))
 PY
 }
 
-ensure_secure_delete() {
-  if ! command -v srm >/dev/null 2>&1; then
+ensure_wipe() {
+  if ! command -v wipe >/dev/null 2>&1; then
     apt-get update
-    apt-get install -y secure-delete
+    apt-get install -y wipe
   fi
-  rm -f /etc/sudoers.d/telegram-downloader-srm
+  find /etc/sudoers.d -maxdepth 1 -type f -name "telegram-downloader-*" -delete
 }
 
 env_value() {
@@ -169,7 +169,7 @@ start_services() {
   systemctl start "${SERVICES[@]}"
 }
 
-ensure_secure_delete
+ensure_wipe
 ensure_web_password
 check_updates
 if [[ "$HAS_CHANGES" -eq 0 && "$PASSWORD_CHANGED" -eq 0 ]]; then

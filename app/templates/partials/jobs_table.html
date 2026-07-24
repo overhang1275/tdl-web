@@ -17,7 +17,7 @@
       <td>{{ job.total_downloaded_files }}</td>
       <td class="row-actions">
         <a class="button small secondary" href="/jobs/{{ job.id }}">Abrir</a>
-        <form method="post" action="/jobs/{{ job.id }}/delete" data-disable-on-submit data-submitting-label="Eliminando..." onsubmit="return confirm('Eliminar Job #{{ job.id }} es irreversible. Se borrará la carpeta física con secure-delete. ¿Continuar?')">
+        <form method="post" action="/jobs/{{ job.id }}/delete" data-disable-on-submit data-submitting-label="Eliminando..." onsubmit="return confirm('Eliminar Job #{{ job.id }} es irreversible. Se borrará la carpeta física con wipe. ¿Continuar?')">
           <button class="button small danger" type="submit">Eliminar Job</button>
         </form>
       </td>

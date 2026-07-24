@@ -49,7 +49,7 @@ get_env_value() {
 }
 
 apt-get update
-apt-get install -y python3 python3-venv python3-pip redis-server curl ca-certificates nginx rsync git secure-delete
+apt-get install -y python3 python3-venv python3-pip redis-server curl ca-certificates nginx rsync git wipe
 
 if ! command -v tdl >/dev/null 2>&1; then
   echo "Installing tdl..."

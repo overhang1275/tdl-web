@@ -137,9 +137,9 @@ def retry_job(db: Session, job: DownloadJob) -> DownloadJob:
     return create_job(db, payload)
 
 
-def secure_delete_job(db: Session, job: DownloadJob) -> None:
-    if not shutil.which("srm"):
-        raise DeleteJobError("secure-delete no está instalado: falta el binario srm.")
+def wipe_delete_job(db: Session, job: DownloadJob) -> None:
+    if not shutil.which("wipe"):
+        raise DeleteJobError("wipe no está instalado.")
 
     try:
         path = job_download_root(job.id, job.download_path).resolve()
@@ -154,8 +154,8 @@ def secure_delete_job(db: Session, job: DownloadJob) -> None:
     if not path.is_dir():
         raise DeleteJobError(f"La ruta del job no es una carpeta: {path}")
 
-    command = ["srm", "-vzr", str(path)]
-    append_job_log(job.id, f"Ejecutando: srm -vzr {path}")
+    command = ["wipe", "-rfiq", str(path)]
+    append_job_log(job.id, f"Ejecutando: wipe -rfiq {path}")
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -172,24 +172,24 @@ def secure_delete_job(db: Session, job: DownloadJob) -> None:
                 append_job_log(job.id, line)
     returncode = process.wait()
     if returncode != 0:
-        detail = "\n".join(output[-20:]) or f"srm falló con código {returncode}"
+        detail = "\n".join(output[-20:]) or f"wipe falló con código {returncode}"
         append_deleted_job_log(job.id, f"falló eliminación segura de {path}: {detail}")
         raise DeleteJobError(detail)
 
-    append_job_log(job.id, f"Job eliminado con secure-delete: {path}")
-    append_deleted_job_log(job.id, f"eliminado con secure-delete: {path}")
+    append_job_log(job.id, f"Job eliminado con wipe: {path}")
+    append_deleted_job_log(job.id, f"eliminado con wipe: {path}")
     db.delete(job)
     db.commit()
 
 
-def secure_delete_job_by_id(job_id: int) -> None:
+def wipe_delete_job_by_id(job_id: int) -> None:
     db = SessionLocal()
     try:
         job = db.get(DownloadJob, job_id)
         if not job:
             return
         try:
-            secure_delete_job(db, job)
+            wipe_delete_job(db, job)
         except DeleteJobError as exc:
             job.error_message = f"No se eliminó el job: {exc}"
             append_job_log(job.id, job.error_message)

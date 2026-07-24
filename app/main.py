@@ -32,7 +32,7 @@ from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, 
 from app.services.errors import friendly_error
 from app.services.files import count_downloaded_files, directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
-from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, secure_delete_job_by_id
+from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, wipe_delete_job_by_id
 from app.services.logs import append_job_log, job_events, job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child, sanitize_subfolder
 from app.services.search import global_search
@@ -1009,10 +1009,10 @@ def job_delete(job_id: int, background_tasks: BackgroundTasks, db: Session = Dep
         cancel_job(db, job)
     job.status = JobStatus.cancelled
     job.stage = JobStage.cancelled
-    job.error_message = "Eliminación segura en progreso. La carpeta se está borrando con secure-delete."
+    job.error_message = "Eliminación segura en progreso. La carpeta se está borrando con wipe."
     append_job_log(job.id, job.error_message)
     db.commit()
-    background_tasks.add_task(secure_delete_job_by_id, job_id)
+    background_tasks.add_task(wipe_delete_job_by_id, job_id)
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 

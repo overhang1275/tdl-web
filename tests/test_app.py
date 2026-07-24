@@ -12,7 +12,7 @@ from app.models import DownloadTemplate, JobStage, JobStatus, MediaType
 from app.services.errors import friendly_error
 from app.services import chat_cache
 from app.config import settings
-from app.services.jobs import DeleteJobError, secure_delete_job
+from app.services.jobs import DeleteJobError, wipe_delete_job
 from app.services.search import global_search
 
 
@@ -171,7 +171,7 @@ def test_global_search_empty_query_returns_empty_groups():
     assert global_search(None, "   ") == {"chats": [], "jobs": [], "files": []}
 
 
-def test_secure_delete_job_uses_srm_before_db_delete(tmp_path, monkeypatch):
+def test_wipe_delete_job_uses_wipe_before_db_delete(tmp_path, monkeypatch):
     downloads = tmp_path / "downloads"
     logs = tmp_path / "logs"
     job_dir = downloads / "chat" / "job"
@@ -206,17 +206,17 @@ def test_secure_delete_job_uses_srm_before_db_delete(tmp_path, monkeypatch):
     job = SimpleNamespace(id=7, download_path=str(job_dir))
     db = FakeDb()
 
-    secure_delete_job(db, job)
+    wipe_delete_job(db, job)
 
-    assert calls[0][0] == ["srm", "-vzr", str(job_dir.resolve())]
+    assert calls[0][0] == ["wipe", "-rfiq", str(job_dir.resolve())]
     assert db.deleted is True
     assert db.committed is True
-    assert "secure-delete" in (logs / "job-7.log").read_text()
+    assert "wipe" in (logs / "job-7.log").read_text()
     assert "wipe file1" in (logs / "job-7.log").read_text()
-    assert "Job #7: eliminado con secure-delete" in (logs / "deleted-jobs.log").read_text()
+    assert "Job #7: eliminado con wipe" in (logs / "deleted-jobs.log").read_text()
 
 
-def test_secure_delete_job_keeps_db_when_srm_fails(tmp_path, monkeypatch):
+def test_wipe_delete_job_keeps_db_when_wipe_fails(tmp_path, monkeypatch):
     downloads = tmp_path / "downloads"
     job_dir = downloads / "chat" / "job"
     job_dir.mkdir(parents=True)
@@ -235,11 +235,11 @@ def test_secure_delete_job_keeps_db_when_srm_fails(tmp_path, monkeypatch):
     job = SimpleNamespace(id=8, download_path=str(job_dir))
 
     with pytest.raises(DeleteJobError, match="denied"):
-        secure_delete_job(db, job)
+        wipe_delete_job(db, job)
     assert "Job #8: falló eliminación segura" in (tmp_path / "logs" / "deleted-jobs.log").read_text()
 
 
-def test_job_delete_returns_before_secure_delete(tmp_path, monkeypatch):
+def test_job_delete_returns_before_wipe(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "logs_dir", tmp_path / "logs")
     job = SimpleNamespace(id=9, status=JobStatus.completed, stage=JobStage.completed, error_message=None)
 
