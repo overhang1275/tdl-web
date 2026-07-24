@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="not-found-panel">
+  <div>
+    <span class="eyebrow">404</span>
+    <h1>Ruta no encontrada</h1>
+    <p>Esta página ya no existe o la URL cambió.</p>
+    <code>{{ missing_path }}</code>
+  </div>
+  <div class="not-found-actions">
+    <a class="button" href="/chats">Ir a Chats</a>
+    <a class="button secondary" href="/dashboard">Dashboard</a>
+  </div>
+</section>
+{% endblock %}

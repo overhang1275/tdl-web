@@ -675,6 +675,24 @@ code {
   align-items: center;
 }
 
+.not-found-panel {
+  display: grid;
+  gap: 20px;
+  align-content: center;
+  min-height: calc(100vh - 120px);
+  padding: 28px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg) var(--radius-md) var(--radius-lg) var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-soft), var(--panel-solid) 58%, #d8f5f2);
+  box-shadow: var(--shadow);
+}
+
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .dashboard-metrics .metric-card {
   position: relative;
   overflow: hidden;
@@ -1801,6 +1819,17 @@ pre code {
   }
 
   .notification-item .button {
+    width: 100%;
+  }
+
+  .not-found-panel {
+    min-height: auto;
+    padding: 20px;
+    border-radius: var(--radius-md);
+  }
+
+  .not-found-actions,
+  .not-found-actions .button {
     width: 100%;
   }
 

@@ -23,6 +23,7 @@ from redis.exceptions import RedisError
 from rq import Worker
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
 from app.database import get_db, init_db
@@ -56,6 +57,20 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 SERVICE_PROCESSES: list[subprocess.Popen] = []
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code != 404:
+        return PlainTextResponse(str(exc.detail), status_code=exc.status_code)
+    if request.url.path.startswith("/api"):
+        return PlainTextResponse("Not found", status_code=404)
+    return templates.TemplateResponse(
+        request=request,
+        name="404.html",
+        context={"missing_path": request.url.path},
+        status_code=404,
+    )
 
 
 def basic_auth_ok(request: Request) -> bool:

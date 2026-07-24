@@ -60,6 +60,16 @@ def test_notifications_page_handles_redis_down(monkeypatch):
     assert "Notificaciones" in response.text
 
 
+def test_missing_page_renders_404_with_chats_link(monkeypatch):
+    monkeypatch.setattr(settings, "web_password", None)
+
+    response = TestClient(app).get("/ruta-vieja")
+
+    assert response.status_code == 404
+    assert "Ruta no encontrada" in response.text
+    assert 'href="/chats"' in response.text
+
+
 def test_start_local_services_does_nothing_when_ready(monkeypatch):
     monkeypatch.setattr("app.main.redis_ping", lambda: True)
     monkeypatch.setattr("app.main.worker_count", lambda: 1)
