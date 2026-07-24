@@ -1013,7 +1013,7 @@ def job_delete(job_id: int, background_tasks: BackgroundTasks, db: Session = Dep
     append_job_log(job.id, job.error_message)
     db.commit()
     background_tasks.add_task(secure_delete_job_by_id, job_id)
-    return RedirectResponse(url="/jobs", status_code=303)
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
 
 @app.get("/jobs/{job_id}/logs", response_class=HTMLResponse)

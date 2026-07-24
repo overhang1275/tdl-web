@@ -11,7 +11,7 @@ Aplicación FastAPI para convertir un flujo `tdl` basado en bash en una interfaz
 - Ejecuta exportación, filtrado JSON y descarga en segundo plano con Redis + RQ.
 - Guarda historial en SQLite.
 - Escribe logs por job.
-- Elimina jobs en background con `secure-delete` (`srm -v -r`) antes de borrar el registro, evitando timeouts de túneles.
+- Elimina jobs en background con `secure-delete` (`sudo srm -vzr`) antes de borrar el registro, mostrando la salida en logs para evitar timeouts de túneles.
 - Registra eliminaciones y fallos en `/opt/tld-web/data/logs/deleted-jobs.log`.
 - Muestra progreso con HTMX polling.
 - Explora archivos descargados desde la UI.
@@ -186,6 +186,7 @@ sudo systemctl reload nginx
 - No se aceptan rutas arbitrarias de usuario.
 - El servicio corre como usuario sin login `telegramdl`.
 - El `.env` debe quedar con permisos `640`, dueño `root:telegramdl`.
+- El instalador crea sudoers limitado para que `telegramdl` ejecute solo `srm` sin password.
 - En producción `WEB_PASSWORD` debe existir; `scripts/install.sh` lo genera automáticamente.
 
 ## API

@@ -178,14 +178,20 @@ def test_secure_delete_job_uses_srm_before_db_delete(tmp_path, monkeypatch):
     job_dir.mkdir(parents=True)
     monkeypatch.setattr(settings, "downloads_dir", downloads)
     monkeypatch.setattr(settings, "logs_dir", logs)
-    monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: "/usr/bin/srm")
+    monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: f"/usr/bin/{name}")
     calls = []
 
-    def fake_run(command, **kwargs):
-        calls.append((command, kwargs))
-        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+    class FakeProcess:
+        stdout = ["wipe file1\n", "wipe file2\n"]
 
-    monkeypatch.setattr("app.services.jobs.subprocess.run", fake_run)
+        def wait(self):
+            return 0
+
+    def fake_popen(command, **kwargs):
+        calls.append((command, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr("app.services.jobs.subprocess.Popen", fake_popen)
 
     class FakeDb:
         deleted = False
@@ -202,10 +208,11 @@ def test_secure_delete_job_uses_srm_before_db_delete(tmp_path, monkeypatch):
 
     secure_delete_job(db, job)
 
-    assert calls[0][0] == ["srm", "-v", "-r", str(job_dir.resolve())]
+    assert calls[0][0] == ["sudo", "-n", "srm", "-vzr", str(job_dir.resolve())]
     assert db.deleted is True
     assert db.committed is True
     assert "secure-delete" in (logs / "job-7.log").read_text()
+    assert "wipe file1" in (logs / "job-7.log").read_text()
     assert "Job #7: eliminado con secure-delete" in (logs / "deleted-jobs.log").read_text()
 
 
@@ -215,11 +222,15 @@ def test_secure_delete_job_keeps_db_when_srm_fails(tmp_path, monkeypatch):
     job_dir.mkdir(parents=True)
     monkeypatch.setattr(settings, "downloads_dir", downloads)
     monkeypatch.setattr(settings, "logs_dir", tmp_path / "logs")
-    monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: "/usr/bin/srm")
-    monkeypatch.setattr(
-        "app.services.jobs.subprocess.run",
-        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr="denied"),
-    )
+    monkeypatch.setattr("app.services.jobs.shutil.which", lambda name: f"/usr/bin/{name}")
+
+    class FailedProcess:
+        stdout = ["denied\n"]
+
+        def wait(self):
+            return 1
+
+    monkeypatch.setattr("app.services.jobs.subprocess.Popen", lambda *args, **kwargs: FailedProcess())
     db = SimpleNamespace(delete=lambda job: pytest.fail("db.delete should not run"), commit=lambda: pytest.fail("commit should not run"))
     job = SimpleNamespace(id=8, download_path=str(job_dir))
 
@@ -251,6 +262,6 @@ def test_job_delete_returns_before_secure_delete(tmp_path, monkeypatch):
     response = job_delete(9, background, FakeDb())
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/jobs"
+    assert response.headers["location"] == "/jobs/9"
     assert background.tasks[0][1] == (9,)
     assert "Eliminación segura en progreso" in job.error_message

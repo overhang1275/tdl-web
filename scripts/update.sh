@@ -7,6 +7,7 @@ APP_DIR="$APP_ROOT/app"
 VENV_DIR="$APP_ROOT/venv"
 DATA_DIR="$APP_ROOT/data"
 ENV_FILE="/etc/telegram-downloader/telegram-downloader.env"
+SUDOERS_FILE="/etc/sudoers.d/telegram-downloader-srm"
 SERVICES=(telegram-downloader-web telegram-downloader-worker)
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -27,10 +28,12 @@ PY
 }
 
 ensure_secure_delete() {
-  if ! command -v srm >/dev/null 2>&1; then
+  if ! command -v srm >/dev/null 2>&1 || ! command -v sudo >/dev/null 2>&1; then
     apt-get update
-    apt-get install -y secure-delete
+    apt-get install -y secure-delete sudo
   fi
+  echo "$APP_USER ALL=(root) NOPASSWD: $(command -v srm || echo /usr/bin/srm)" > "$SUDOERS_FILE"
+  chmod 440 "$SUDOERS_FILE"
 }
 
 env_value() {
@@ -152,6 +155,13 @@ apply_update() {
   "$REPO_ROOT/" "$APP_DIR/"
 }
 
+install_service_units() {
+  cp "$APP_DIR/deploy/systemd/telegram-downloader-web.service" /etc/systemd/system/telegram-downloader-web.service
+  cp "$APP_DIR/deploy/systemd/telegram-downloader-worker.service" /etc/systemd/system/telegram-downloader-worker.service
+  sed -i "s|/opt/tld-web|$APP_ROOT|g" /etc/systemd/system/telegram-downloader-web.service
+  sed -i "s|/opt/tld-web|$APP_ROOT|g" /etc/systemd/system/telegram-downloader-worker.service
+}
+
 stop_services() {
   systemctl stop "${SERVICES[@]}"
 }
@@ -173,6 +183,7 @@ stop_services
 trap start_services EXIT
 backup_before_update
 apply_update
+install_service_units
 "$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
 chown -R "$APP_USER:$APP_USER" "$APP_ROOT"
 start_services
