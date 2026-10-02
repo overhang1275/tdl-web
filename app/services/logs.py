@@ -40,7 +40,7 @@ def append_deleted_job_log(job_id: int, message: str) -> None:
         handle.write(f"[{timestamp}Z] Job #{job_id}: {message.rstrip()}\n")
 
 
-def read_job_log(job_id: int, tail_bytes: int = 200_000) -> str:
+def read_job_log(job_id: int, tail_bytes: int = 50_000) -> str:
     path = job_log_path(job_id)
     if not path.exists():
         return ""

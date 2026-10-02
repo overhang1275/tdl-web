@@ -7,7 +7,7 @@ from rq import Queue
 from rq.job import Job
 from redis.exceptions import RedisError
 from redis import Redis
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -215,9 +215,18 @@ def queue_position(job: DownloadJob) -> int | None:
         return None
 
 
-def list_jobs(db: Session) -> list[DownloadJob]:
+def count_jobs(db: Session) -> int:
+    return db.scalar(select(func.count()).select_from(DownloadJob)) or 0
+
+
+def list_jobs(db: Session, limit: int | None = None, offset: int = 0) -> list[DownloadJob]:
     sync_pending_jobs_with_queue(db)
-    return list(db.scalars(select(DownloadJob).order_by(DownloadJob.created_at.desc())).all())
+    query = select(DownloadJob).order_by(DownloadJob.created_at.desc())
+    if offset:
+        query = query.offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    return list(db.scalars(query).all())
 
 
 def list_jobs_for_chat(db: Session, chat_id: str) -> list[DownloadJob]:

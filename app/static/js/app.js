@@ -31,6 +31,99 @@ window.addEventListener("pageshow", () => {
 });
 
 (() => {
+  function busyControl(source) {
+    if (!(source instanceof Element)) {
+      return null;
+    }
+    if (source.matches("button, a")) {
+      return source;
+    }
+    return source.querySelector("button[type='submit'], button, a.button");
+  }
+
+  function setBusy(control) {
+    if (!(control instanceof HTMLElement) || control.dataset.busy === "true") {
+      return;
+    }
+    control.dataset.busy = "true";
+    control.classList.add("is-loading");
+    control.setAttribute("aria-busy", "true");
+    if (control instanceof HTMLButtonElement) {
+      control.disabled = true;
+    }
+  }
+
+  function clearBusy(control) {
+    if (!(control instanceof HTMLElement)) {
+      return;
+    }
+    control.dataset.busy = "false";
+    control.classList.remove("is-loading");
+    control.removeAttribute("aria-busy");
+    if (control instanceof HTMLButtonElement) {
+      control.disabled = false;
+    }
+  }
+
+  function stopJobPolling() {
+    document.querySelectorAll("[data-job-live]").forEach((panel) => {
+      panel.dataset.pollStopped = "true";
+      panel.removeAttribute("hx-get");
+      panel.removeAttribute("hx-trigger");
+    });
+  }
+
+  document.body.addEventListener("htmx:beforeRequest", (event) => {
+    const source = event.detail.elt;
+    if (source instanceof HTMLElement && source.dataset.pollStopped === "true") {
+      event.preventDefault();
+      return;
+    }
+    if (source instanceof HTMLElement && source.hasAttribute("data-job-live")) {
+      return;
+    }
+    const control = busyControl(source);
+    setBusy(control);
+    if (source instanceof HTMLElement && control instanceof HTMLElement) {
+      source.dataset.busyControl = "true";
+    }
+  });
+
+  document.body.addEventListener("htmx:afterRequest", (event) => {
+    const source = event.detail.elt;
+    if (!(source instanceof HTMLElement) || source.dataset.busyControl !== "true") {
+      return;
+    }
+    clearBusy(busyControl(source));
+    delete source.dataset.busyControl;
+  });
+
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const target = event.detail.target;
+    if (target instanceof Element && target.querySelector("[data-job-terminal='true']")) {
+      stopJobPolling();
+    }
+  });
+
+  window.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    const link = event.target instanceof Element ? event.target.closest("a") : null;
+    if (!(link instanceof HTMLAnchorElement) || link.target || link.hasAttribute("download")) {
+      return;
+    }
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin || (url.pathname === window.location.pathname && url.hash)) {
+      return;
+    }
+    if (link.matches(".button, .nav-list a, .bottom-nav a, .mobile-fab, .brand")) {
+      setBusy(link);
+    }
+  });
+})();
+
+(() => {
   const page = document.querySelector("[data-notifications-page]");
   if (!page) {
     return;

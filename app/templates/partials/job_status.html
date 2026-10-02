@@ -1,3 +1,4 @@
+<div data-job-terminal="{{ 'true' if job.status.value in ['completed', 'failed', 'cancelled'] else 'false' }}">
 <h2>Progreso</h2>
 {% set found_count = job.total_filtered_messages %}
 {% set downloaded_count = job.download_observed_files or job.total_downloaded_files %}
@@ -47,3 +48,4 @@
   </details>
 </div>
 {% endif %}
+</div>

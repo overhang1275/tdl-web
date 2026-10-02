@@ -33,7 +33,7 @@ from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, 
 from app.services.errors import friendly_error
 from app.services.files import count_downloaded_files, directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
-from app.services.jobs import QueueUnavailableError, cancel_job, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, wipe_delete_job_by_id
+from app.services.jobs import QueueUnavailableError, cancel_job, count_jobs, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, wipe_delete_job_by_id
 from app.services.logs import append_job_log, job_events, job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child, sanitize_subfolder
 from app.services.search import global_search
@@ -452,7 +452,7 @@ def index() -> RedirectResponse:
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
-    jobs = list_jobs(db)[:8]
+    jobs = list_jobs(db, limit=8)
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -473,13 +473,12 @@ def search_page(request: Request, q: str = "", db: Session = Depends(get_db)):
 @app.get("/notifications", response_class=HTMLResponse)
 def notifications_page(request: Request, page: int = 1, per_page: int = 15, db: Session = Depends(get_db)):
     per_page = per_page if per_page in (5, 15) else 15
-    all_jobs = list_jobs(db)
-    total = len(all_jobs)
+    total = count_jobs(db)
     page_count = max(1, (total + per_page - 1) // per_page)
     page = min(max(page, 1), page_count)
     start = (page - 1) * per_page
     end = start + per_page
-    jobs = all_jobs[start:end]
+    jobs = list_jobs(db, limit=per_page, offset=start)
     status = system_status()
     pagination = {
         "page": page,
@@ -978,7 +977,7 @@ def jobs_create_form(
 
 @app.get("/api/jobs/notifications")
 def api_job_notifications(db: Session = Depends(get_db)):
-    jobs = list_jobs(db)[:20]
+    jobs = list_jobs(db, limit=20)
     return {
         "jobs": [
             {

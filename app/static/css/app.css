@@ -236,6 +236,24 @@ p {
   opacity: 0.48;
 }
 
+.is-loading {
+  cursor: progress;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.button.is-loading::after,
+.mobile-fab.is-loading::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
 .button.secondary {
   color: var(--accent-dark);
   background: var(--accent-soft);
