@@ -1,20 +1,48 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 import time
 
+from app.config import settings
 from app.database import SessionLocal, engine, init_db
 from app.models import DownloadJob, JobStage, JobStatus
 from app.services.errors import friendly_error
 from app.services.files import scan_download_progress
-from app.services.filtering import filter_export
+from app.services.filtering import exclude_message_ids, filter_export, message_ids_from_export
 from app.services.logs import append_job_log
+from app.services.paths import chat_path_key, safe_child
 from app.services.tdl import TdlCancelled, TdlService
 
 
 class JobCancelled(RuntimeError):
     pass
+
+
+def downloaded_ids_path(chat_id: str) -> Path:
+    return safe_child(settings.exports_dir, chat_path_key(chat_id), "downloaded-message-ids.json")
+
+
+def read_downloaded_ids(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return set()
+    return {str(item) for item in payload if item is not None} if isinstance(payload, list) else set()
+
+
+def add_downloaded_ids(path: Path, ids: set[str]) -> int:
+    if not ids:
+        return 0
+    current = read_downloaded_ids(path)
+    merged = current | ids
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # ponytail: no cross-process lock; move this ledger to DB if multiple workers write the same chat concurrently.
+    path.write_text(json.dumps(sorted(merged), indent=2), encoding="utf-8")
+    return len(merged) - len(current)
 
 
 def run_download_job(job_id: int) -> None:
@@ -85,6 +113,24 @@ def run_download_job(job_id: int) -> None:
         if total == 0:
             raise ValueError("Filtered messages: 0")
 
+        ledger_path = downloaded_ids_path(job.chat_id)
+        remaining, skipped = exclude_message_ids(
+            Path(job.filtered_json_path),
+            Path(job.filtered_json_path),
+            read_downloaded_ids(ledger_path),
+        )
+        job.total_filtered_messages = remaining
+        db.commit()
+        if skipped:
+            append_job_log(job.id, f"Already downloaded messages skipped: {skipped}")
+        if remaining == 0:
+            job.stage = JobStage.completed
+            job.status = JobStatus.completed
+            job.finished_at = datetime.utcnow()
+            db.commit()
+            append_job_log(job.id, "Completed. No new messages to download.")
+            return
+
         raise_if_cancelled()
         job.stage = JobStage.downloading
         job.download_observed_files = 0
@@ -132,6 +178,9 @@ def run_download_job(job_id: int) -> None:
         )
 
         raise_if_cancelled()
+        recorded = add_downloaded_ids(downloaded_ids_path(job.chat_id), message_ids_from_export(Path(job.filtered_json_path)))
+        if recorded:
+            append_job_log(job.id, f"Recorded downloaded messages: {recorded}")
         track_download_progress(force=True)
         db.refresh(job)
         job.stage = JobStage.completed

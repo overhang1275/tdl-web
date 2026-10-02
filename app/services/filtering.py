@@ -79,6 +79,33 @@ def find_messages_container(payload: Any) -> tuple[list[dict[str, Any]], str | N
     return [], None
 
 
+def message_id(message: dict[str, Any]) -> str | None:
+    for key in ("id", "ID", "message_id", "MessageID"):
+        if key in message and message[key] is not None:
+            return str(message[key])
+    return None
+
+
+def message_ids_from_export(input_path: Path) -> set[str]:
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    messages, _ = find_messages_container(payload)
+    return {id_ for message in messages if (id_ := message_id(message))}
+
+
+def exclude_message_ids(input_path: Path, output_path: Path, excluded_ids: set[str]) -> tuple[int, int]:
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    messages, container_key = find_messages_container(payload)
+    kept = [message for message in messages if message_id(message) not in excluded_ids]
+    skipped = len(messages) - len(kept)
+    preserved = copy.deepcopy(payload)
+    if container_key is None:
+        preserved = kept
+    elif isinstance(preserved, dict):
+        preserved[container_key] = kept
+    output_path.write_text(json.dumps(preserved, ensure_ascii=False, indent=2), encoding="utf-8")
+    return len(kept), skipped
+
+
 def message_matches(
     message: dict[str, Any],
     hashtag: str | None,
@@ -127,4 +154,3 @@ def filter_export(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(preserved, ensure_ascii=False, indent=2), encoding="utf-8")
     return len(filtered)
-

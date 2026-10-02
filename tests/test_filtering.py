@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from app.services.filtering import filter_export
+from app.services.filtering import exclude_message_ids, filter_export, message_ids_from_export
 
 
 def test_filter_export_preserves_messages_container(tmp_path):
@@ -54,3 +54,16 @@ def test_filter_export_supports_text_lists_and_dates(tmp_path):
     assert count == 1
     assert json.loads(target.read_text(encoding="utf-8"))[0]["id"] == 1
 
+
+def test_exclude_message_ids_preserves_container(tmp_path):
+    target = tmp_path / "filtered.json"
+    target.write_text(
+        json.dumps({"messages": [{"id": 1, "text": "done"}, {"id": 2, "text": "new"}]}),
+        encoding="utf-8",
+    )
+
+    remaining, skipped = exclude_message_ids(target, target, {"1"})
+
+    assert (remaining, skipped) == (1, 1)
+    assert message_ids_from_export(target) == {"2"}
+    assert json.loads(target.read_text(encoding="utf-8"))["messages"][0]["id"] == 2
