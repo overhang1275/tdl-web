@@ -13,6 +13,7 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 UPDATE_MODE="copy"
 HAS_CHANGES=1
 PASSWORD_CHANGED=0
+CONFIG_CHANGED=0
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run as root." >&2
@@ -66,6 +67,37 @@ ensure_web_password() {
   fi
 }
 
+ensure_transfer_settings() {
+  local key value
+  for key in DOWNLOAD_BATCH_SIZE DOWNLOAD_IDLE_TIMEOUT_SECONDS EXPORT_BATCH_SIZE; do
+    case "$key" in
+      DOWNLOAD_BATCH_SIZE) value=100 ;;
+      DOWNLOAD_IDLE_TIMEOUT_SECONDS) value=600 ;;
+      EXPORT_BATCH_SIZE) value=5000 ;;
+    esac
+    if [[ -z "$(env_value "$key")" ]]; then
+      set_env_value "$key" "$value"
+      CONFIG_CHANGED=1
+    fi
+  done
+}
+
+migrate_database() {
+  (
+    cd "$APP_DIR"
+    runuser -u "$APP_USER" -- "$VENV_DIR/bin/python" -c '
+import sys
+from pathlib import Path
+from app.config import load_env_file, settings
+load_env_file(Path(sys.argv[1]), override=True)
+settings.__init__()
+from app.database import init_db
+init_db()
+print("Database migration OK")
+' "$ENV_FILE"
+  )
+}
+
 ask_yes_no() {
   local prompt="$1"
   local default="${2:-n}"
@@ -80,26 +112,35 @@ ask_yes_no() {
 }
 
 backup_before_update() {
-  local db_url db_path downloads_dir backup_dir stamp tar_args=()
+  local db_url db_path downloads_dir backup_dir stamp
   db_url="$(env_value DATABASE_URL)"
   if [[ "$db_url" == sqlite:///* ]]; then
     db_path="${db_url#sqlite:///}"
   else
     db_path="$DATA_DIR/telegram_downloader.sqlite3"
   fi
+  [[ "$db_path" == /* ]] || db_path="$APP_DIR/$db_path"
   downloads_dir="$(env_value DOWNLOADS_DIR)"
   downloads_dir="${downloads_dir:-$DATA_DIR/downloads}"
   backup_dir="$DATA_DIR/backups"
   stamp="$(date +%Y%m%d-%H%M%S)"
 
   mkdir -p "$backup_dir"
-  [[ -f "$db_path" ]] && tar_args+=("$db_path")
-  if [[ -d "$downloads_dir" ]] && ask_yes_no "Respaldar descargas? Puede tardar mucho. [s/N]" n; then
-    tar_args+=("$downloads_dir")
+  if [[ -f "$db_path" ]]; then
+    "$VENV_DIR/bin/python" - "$db_path" "$backup_dir/update-$stamp.sqlite3" <<'PY'
+import sqlite3
+import sys
+from pathlib import Path
+
+with sqlite3.connect(Path(sys.argv[1]).resolve().as_uri() + "?mode=ro", uri=True) as source:
+    with sqlite3.connect(sys.argv[2]) as destination:
+        source.backup(destination)
+print("SQLite backup:", sys.argv[2])
+PY
   fi
-  if [[ "${#tar_args[@]}" -gt 0 ]]; then
-    tar -czf "$backup_dir/update-$stamp.tgz" "${tar_args[@]}"
-    echo "Backup: $backup_dir/update-$stamp.tgz"
+  if [[ -d "$downloads_dir" ]] && ask_yes_no "Respaldar descargas? Puede tardar mucho. [s/N]" n; then
+    tar -czf "$backup_dir/downloads-$stamp.tgz" "$downloads_dir"
+    echo "Downloads backup: $backup_dir/downloads-$stamp.tgz"
   fi
 }
 
@@ -167,23 +208,28 @@ stop_services() {
 start_services() {
   systemctl daemon-reload
   systemctl start "${SERVICES[@]}"
+  for service in "${SERVICES[@]}"; do
+    systemctl is-active --quiet "$service"
+  done
 }
 
 ensure_wipe
 ensure_web_password
+ensure_transfer_settings
 check_updates
-if [[ "$HAS_CHANGES" -eq 0 && "$PASSWORD_CHANGED" -eq 0 ]]; then
+if [[ "$HAS_CHANGES" -eq 0 && "$PASSWORD_CHANGED" -eq 0 && "$CONFIG_CHANGED" -eq 0 ]]; then
   echo "No hay actualizaciones disponibles."
   exit 0
 fi
 
 stop_services
-trap start_services EXIT
+trap 'systemctl stop "${SERVICES[@]}" || true; echo "La actualización falló. Revisa el error antes de iniciar los servicios." >&2' ERR
 backup_before_update
 apply_update
 install_service_units
 "$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
 chown -R "$APP_USER:$APP_USER" "$APP_ROOT"
+migrate_database
 start_services
-trap - EXIT
+trap - ERR
 echo "Updated."

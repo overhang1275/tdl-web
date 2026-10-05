@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import json
+from pathlib import Path
+from datetime import datetime, timedelta
+from uuid import uuid4
 
 from rq import Queue
 from rq.job import Job
+from rq.exceptions import NoSuchJobError
 from redis.exceptions import RedisError
 from redis import Redis
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models import DownloadJob, JobStage, JobStatus, MediaType
+from app.models import DownloadFile, DownloadJob, JobStage, JobStatus, MediaType
 from app.schemas import JobCreate
 from app.services.files import job_download_root
 from app.services.logs import append_deleted_job_log, append_job_log
@@ -71,17 +76,45 @@ def create_job(db: Session, payload: JobCreate, enqueue: bool = True) -> Downloa
     db.refresh(job)
     if enqueue:
         try:
-            rq_job = queue.enqueue("app.worker.run_download_job", job.id, job_timeout=settings.command_timeout_seconds + 600)
+            enqueue_job(db, job, queue=queue)
         except RedisError as exc:
             job.stage = JobStage.failed
             job.status = JobStatus.failed
             job.error_message = f"Could not enqueue job in Redis: {exc}"
             db.commit()
             raise QueueUnavailableError(job.error_message) from exc
-        job.rq_job_id = rq_job.id
-        db.commit()
-        db.refresh(job)
     return job
+
+
+def enqueue_job(db: Session, job: DownloadJob, delay: int = 0, queue=None) -> bool:
+    queue = queue or ensure_queue_available()
+    token = uuid4().hex
+    claimed = db.execute(update(DownloadJob).where(
+        DownloadJob.id == job.id,
+        DownloadJob.status.in_(ACTIVE_STATUSES),
+        DownloadJob.cancel_requested.is_(False),
+        DownloadJob.rq_job_id == job.rq_job_id,
+    ).values(rq_job_id=token, rq_enqueued_at=datetime.utcnow(), status=JobStatus.pending))
+    db.commit()
+    db.refresh(job)
+    if not claimed.rowcount:
+        if job.cancel_requested and job.status in ACTIVE_STATUSES:
+            job.status, job.stage = JobStatus.cancelled, JobStage.cancelled
+            job.finished_at = datetime.utcnow()
+            db.commit()
+        return False
+    kwargs = {"job_id": token, "job_timeout": settings.command_timeout_seconds + 120}
+    try:
+        if delay:
+            queue.enqueue_in(timedelta(seconds=delay), "app.worker.run_download_job", job.id, token, **kwargs)
+        else:
+            queue.enqueue("app.worker.run_download_job", job.id, token, **kwargs)
+    except RedisError as exc:
+        job.status, job.stage = JobStatus.failed, JobStage.failed
+        job.error_message = f"Could not enqueue continuation in Redis: {exc}"
+        db.commit()
+        raise QueueUnavailableError(job.error_message) from exc
+    return True
 
 
 def find_duplicate_active_job(db: Session, payload: JobCreate) -> DownloadJob | None:
@@ -105,12 +138,13 @@ def find_duplicate_active_job(db: Session, payload: JobCreate) -> DownloadJob | 
 def cancel_job(db: Session, job: DownloadJob) -> DownloadJob:
     if job.status not in ACTIVE_STATUSES:
         return job
+    was_pending = job.status == JobStatus.pending
     job.cancel_requested = True
     if job.status == JobStatus.pending:
         job.status = JobStatus.cancelled
         job.stage = JobStage.cancelled
     db.commit()
-    if job.rq_job_id:
+    if job.rq_job_id and was_pending:
         try:
             rq_job = Job.fetch(job.rq_job_id, connection=get_queue().connection)
             rq_job.cancel()
@@ -121,20 +155,42 @@ def cancel_job(db: Session, job: DownloadJob) -> DownloadJob:
 
 
 def retry_job(db: Session, job: DownloadJob) -> DownloadJob:
-    payload = JobCreate(
-        chat_id=job.chat_id,
-        chat_title=job.chat_title,
-        hashtag=job.hashtag,
-        media_type=job.media_type.value,
-        search_text=job.search_text,
-        date_from=job.date_from,
-        date_to=job.date_to,
-        skip_same=job.skip_same,
-        refresh_export=job.refresh_export,
-        export_only=job.export_only,
-        output_subfolder=job.output_subfolder,
-    )
-    return create_job(db, payload)
+    if job.status in ACTIVE_STATUSES:
+        return job
+    queue = ensure_queue_available()
+    # Claim the retry in SQL so repeated/concurrent clicks cannot enqueue twice.
+    claimed = db.execute(update(DownloadJob).where(
+        DownloadJob.id == job.id,
+        DownloadJob.status.in_((JobStatus.failed, JobStatus.cancelled)),
+    ).values(status=JobStatus.pending))
+    db.commit()
+    db.refresh(job)
+    if not claimed.rowcount:
+        return job
+    from app.services.transfers import reset_pending_files, write_json_atomic
+
+    try:
+        # Freeze legacy jobs' already-filtered selection before an export refresh.
+        filtered = Path(job.filtered_json_path) if job.filtered_json_path else None
+        if not job.transfer_initialized and filtered and filtered.exists():
+            snapshot = Path(job.export_json_path).parent / f"export-job-{job.id}.json"
+            if not snapshot.exists():
+                write_json_atomic(snapshot, json.loads(filtered.read_text(encoding="utf-8")))
+        reset_pending_files(db, job)
+    except Exception as exc:
+        db.rollback()
+        job.status, job.stage = JobStatus.failed, JobStage.failed
+        job.error_message = str(exc)
+        db.commit()
+        raise
+    job.cancel_requested = False
+    job.error_message = None
+    job.finished_at = None
+    job.stage = JobStage.downloading if job.transfer_initialized else JobStage.exporting
+    db.commit()
+    enqueue_job(db, job, queue=queue)
+    append_job_log(job.id, "Reanudando desde los archivos pendientes; se conserva la selección original.")
+    return job
 
 
 def wipe_delete_job(db: Session, job: DownloadJob) -> None:
@@ -240,38 +296,49 @@ def list_jobs_for_chat(db: Session, chat_id: str) -> list[DownloadJob]:
     )
 
 
-def sync_pending_jobs_with_queue(db: Session) -> None:
+def sync_pending_jobs_with_queue(db: Session, job_id: int | None = None) -> None:
+    query = select(DownloadJob).where(
+        DownloadJob.status.in_(ACTIVE_STATUSES), DownloadJob.rq_job_id.is_not(None),
+    )
+    if job_id is not None:
+        query = query.where(DownloadJob.id == job_id)
     pending_jobs = list(
-        db.scalars(
-            select(DownloadJob).where(
-                DownloadJob.status == JobStatus.pending,
-                DownloadJob.rq_job_id.is_not(None),
-            )
-        ).all()
+        db.scalars(query).all()
     )
     if not pending_jobs:
         return
     try:
-        redis = Redis.from_url(settings.redis_url)
+        redis = Redis.from_url(settings.redis_url, socket_connect_timeout=0.5, socket_timeout=0.5)
         redis.ping()
     except RedisError:
         return
     changed = False
     for job in pending_jobs:
+        token = job.rq_job_id
+        error = None
         try:
-            rq_job = Job.fetch(job.rq_job_id, connection=redis)
-        except Exception:
+            rq_job = Job.fetch(token, connection=redis)
+            rq_status = str(rq_job.get_status()).lower()
+        except NoSuchJobError:
+            # The SQL token is committed just before enqueue; allow that gap.
+            if job.rq_enqueued_at and (datetime.utcnow() - job.rq_enqueued_at).total_seconds() < 30:
+                continue
+            error = "Trabajo ausente de la cola. Usa Reintentar pendientes para recuperar el avance guardado."
+            rq_status = "missing"
+        except RedisError:
             continue
-        rq_status = str(rq_job.get_status()).lower()
-        if "failed" in rq_status:
-            job.stage = JobStage.failed
-            job.status = JobStatus.failed
-            job.error_message = (rq_job.exc_info or "Worker failed before updating this job.")[:4000]
-            changed = True
+        if any(state in rq_status for state in ("failed", "stopped", "canceled")):
+            error = (rq_job.exc_info or "Worker interrumpido. Usa Reintentar pendientes.")[:4000]
         elif "finished" in rq_status:
-            job.stage = JobStage.failed
-            job.status = JobStatus.failed
-            job.error_message = "Worker finished without updating this job state. Recreate the job."
-            changed = True
+            error = "Worker interrumpido. Usa Reintentar pendientes para continuar desde el avance guardado."
+        if error:
+            result = db.execute(update(DownloadJob).where(
+                DownloadJob.id == job.id, DownloadJob.rq_job_id == token,
+                DownloadJob.status.in_(ACTIVE_STATUSES),
+            ).values(stage=JobStage.failed, status=JobStatus.failed,
+                     error_message=error, finished_at=datetime.utcnow()),
+                execution_options={"synchronize_session": False})
+            changed = changed or bool(result.rowcount)
     if changed:
         db.commit()
+        db.expire_all()

@@ -33,7 +33,7 @@ from app.services.chat_cache import ChatsRefreshInProgress, delete_chats_cache, 
 from app.services.errors import friendly_error
 from app.services.files import count_downloaded_files, directory_size, downloaded_file_path, file_kind, human_duration, human_size, job_download_root, list_downloaded_files
 from app.services.interactive_login import interactive_login_service
-from app.services.jobs import QueueUnavailableError, cancel_job, count_jobs, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, wipe_delete_job_by_id
+from app.services.jobs import QueueUnavailableError, cancel_job, count_jobs, create_job, find_duplicate_active_job, list_jobs, list_jobs_for_chat, queue_position, retry_job, sync_pending_jobs_with_queue, wipe_delete_job_by_id
 from app.services.logs import append_job_log, job_events, job_log_path, read_job_log
 from app.services.paths import chat_path_key, safe_child, sanitize_subfolder
 from app.services.search import global_search
@@ -1006,6 +1006,7 @@ def job_detail(request: Request, job_id: int, db: Session = Depends(get_db)):
 
 @app.get("/jobs/{job_id}/status", response_class=HTMLResponse)
 def job_status_partial(request: Request, job_id: int, db: Session = Depends(get_db)):
+    sync_pending_jobs_with_queue(db, job_id=job_id)
     job = get_job_or_404(db, job_id)
     return templates.TemplateResponse(
         request=request,
@@ -1028,6 +1029,10 @@ def job_retry(job_id: int, db: Session = Depends(get_db)):
         new_job = retry_job(db, old_job)
     except QueueUnavailableError as exc:
         old_job.error_message = f"{exc}. Instala/inicia Redis y vuelve a intentar."
+        db.commit()
+        return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+    except (ValueError, OSError) as exc:
+        old_job.error_message = str(exc)
         db.commit()
         return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
     return RedirectResponse(url=f"/jobs/{new_job.id}", status_code=303)

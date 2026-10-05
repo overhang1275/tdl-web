@@ -36,6 +36,16 @@ def migrate_sqlite() -> None:
         return
     columns = {column["name"] for column in inspector.get_columns("download_jobs")}
     with engine.begin() as connection:
+        for name, definition in {
+            "transfer_initialized": "BOOLEAN NOT NULL DEFAULT 0",
+            "total_failed_files": "INTEGER NOT NULL DEFAULT 0",
+            "export_cursor": "INTEGER",
+            "export_upper_id": "INTEGER",
+            "operation_attempts": "INTEGER NOT NULL DEFAULT 0",
+            "rq_enqueued_at": "DATETIME",
+        }.items():
+            if name not in columns:
+                connection.execute(text(f"ALTER TABLE download_jobs ADD COLUMN {name} {definition}"))
         if "refresh_export" not in columns:
             connection.execute(text("ALTER TABLE download_jobs ADD COLUMN refresh_export BOOLEAN NOT NULL DEFAULT 1"))
         if "export_only" not in columns:

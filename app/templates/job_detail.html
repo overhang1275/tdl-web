@@ -29,11 +29,6 @@
       <button class="button danger" type="submit">Cancelar job</button>
     </form>
     {% endif %}
-    {% if job.status.value in ["failed", "cancelled"] %}
-    <form method="post" action="/jobs/{{ job.id }}/retry" data-disable-on-submit>
-      <button class="button" type="submit">Reintentar</button>
-    </form>
-    {% endif %}
   </div>
 
   <details class="cleanup-box">

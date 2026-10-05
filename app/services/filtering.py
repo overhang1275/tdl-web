@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import mimetypes
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,9 @@ def has_media_type(message: dict[str, Any], media_type: str) -> bool:
     if media_type == "all":
         return True
     haystack: list[str] = []
+    if message.get("file"):
+        mime, _ = mimetypes.guess_type(str(message["file"]))
+        haystack.append(mime or "document")
     for key in ("type", "media_type", "mime_type"):
         if message.get(key):
             haystack.append(str(message[key]).lower())

@@ -1,13 +1,14 @@
 <div data-job-terminal="{{ 'true' if job.status.value in ['completed', 'failed', 'cancelled'] else 'false' }}">
 <h2>Progreso</h2>
 {% set found_count = job.total_filtered_messages %}
-{% set downloaded_count = job.download_observed_files or job.total_downloaded_files %}
+{% set downloaded_count = job.total_downloaded_files if job.transfer_initialized else (job.download_observed_files or job.total_downloaded_files) %}
+{% set failed_count = job.total_failed_files or 0 %}
 {% set progress_percent = ((downloaded_count / found_count) * 100) if found_count else 0 %}
 {% if progress_percent > 100 %}{% set progress_percent = 100 %}{% endif %}
 <div class="progress-block">
   <div class="progress-row">
     <div>
-      <span>Progreso aproximado</span>
+      <span>{{ "Archivos verificados" if job.transfer_initialized else "Progreso aproximado" }}</span>
       <span class="pill status-{{ job.status.value }}">{{ job.status.value }}</span>
     </div>
     <strong>{{ "%.0f"|format(progress_percent) }}%</strong>
@@ -22,11 +23,21 @@
   <div class="progress-stats">
     <div><span>Encontrados</span><strong>{{ found_count }}</strong></div>
     <div><span>Descargados</span><strong>{{ downloaded_count }}</strong></div>
+    {% if job.transfer_initialized %}
+    <div><span>Pendientes</span><strong>{{ [found_count - downloaded_count - failed_count, 0]|max }}</strong></div>
+    <div><span>Fallidos</span><strong>{{ failed_count }}</strong></div>
+    {% endif %}
     <div><span>Tamaño</span><strong>{{ human_size(job.download_observed_bytes) }}</strong></div>
     <div><span>Velocidad</span><strong>{{ human_size(job.download_speed_bps) }}/s</strong></div>
     <div><span>ETA</span><strong>{{ human_duration(job.download_eta_seconds) }}</strong></div>
   </div>
 </div>
+{% if job.status.value in ["failed", "cancelled"] %}
+<form method="post" action="/jobs/{{ job.id }}/retry" data-disable-on-submit data-submitting-label="Reanudando…">
+  <button class="button" type="submit">Reintentar pendientes</button>
+  <p>Continúa este job desde el avance guardado y conserva los archivos completos.</p>
+</form>
+{% endif %}
 <div class="status-grid">
   <div><span>Stage</span><strong>{{ job.stage.value }}</strong></div>
   <div><span>Status</span><strong>{{ job.status.value }}</strong></div>

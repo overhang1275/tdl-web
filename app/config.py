@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 
-def load_env_file(path: Path = Path(".env")) -> None:
+def load_env_file(path: Path = Path(".env"), *, override: bool = False) -> None:
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -12,7 +12,11 @@ def load_env_file(path: Path = Path(".env")) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
+        key, value = key.strip(), value.strip().strip("\"'")
+        if override:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
 
 
 load_env_file()
@@ -47,6 +51,9 @@ class Settings:
         self.tdl_binary = os.getenv("TDL_BINARY", "tdl")
         self.tdl_namespace = os.getenv("TDL_NAMESPACE", "default")
         self.command_timeout_seconds = int(os.getenv("COMMAND_TIMEOUT_SECONDS", "7200"))
+        self.download_batch_size = max(1, int(os.getenv("DOWNLOAD_BATCH_SIZE", "100")))
+        self.download_idle_timeout_seconds = max(1, int(os.getenv("DOWNLOAD_IDLE_TIMEOUT_SECONDS", "600")))
+        self.export_batch_size = max(1, int(os.getenv("EXPORT_BATCH_SIZE", "5000")))
         self.web_password = os.getenv("WEB_PASSWORD") or None
 
     def ensure_directories(self) -> None:

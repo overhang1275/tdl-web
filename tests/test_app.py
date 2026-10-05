@@ -16,6 +16,20 @@ from app.services.jobs import DeleteJobError, wipe_delete_job
 from app.services.search import global_search
 
 
+@pytest.fixture(autouse=True)
+def isolated_app_database(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app import database
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'app.sqlite'}", connect_args={"check_same_thread": False})
+    database.Base.metadata.create_all(engine)
+    monkeypatch.setattr(database, "engine", engine)
+    monkeypatch.setattr(database, "SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
+    yield
+    engine.dispose()
+
+
 def test_health_endpoint():
     assert app.title == "Telegram Downloader"
     assert health() == {"status": "ok"}

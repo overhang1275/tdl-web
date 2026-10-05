@@ -68,6 +68,8 @@ class TdlService:
         args: list[str],
         timeout: int | None = None,
         should_cancel: Callable[[], bool] | None = None,
+        progress_bytes: Callable[[], int] | None = None,
+        idle_timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         self.ensure_runtime_dirs()
         full_args = [
@@ -79,6 +81,8 @@ class TdlService:
             *args,
         ]
         started_at = time.monotonic()
+        last_progress_at = started_at
+        last_bytes = progress_bytes() if progress_bytes else 0
         limit = timeout or self.timeout
         with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout_file, tempfile.TemporaryFile(
             mode="w+", encoding="utf-8"
@@ -93,27 +97,28 @@ class TdlService:
                 )
             except FileNotFoundError as exc:
                 raise TdlError(f"tdl binary not found: {self.binary}") from exc
-            while process.poll() is None:
-                if should_cancel and should_cancel():
+            try:
+                while process.poll() is None:
+                    if should_cancel and should_cancel():
+                        raise TdlCancelled("tdl command cancelled")
+                    now = time.monotonic()
+                    if progress_bytes:
+                        current_bytes = progress_bytes()
+                        if current_bytes != last_bytes:
+                            last_progress_at, last_bytes = now, current_bytes
+                        elif idle_timeout and now - last_progress_at > idle_timeout:
+                            raise TdlError(f"Descarga sin progreso durante {idle_timeout} segundos")
+                    if now - started_at > limit:
+                        raise TdlError(f"tdl command timed out after {limit} seconds")
+                    time.sleep(1)
+            finally:
+                if process.poll() is None:
                     process.terminate()
                     try:
                         process.wait(timeout=5)
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
-                    stdout_file.seek(0)
-                    stderr_file.seek(0)
-                    details = (stderr_file.read() or stdout_file.read() or "tdl command cancelled").strip()
-                    raise TdlCancelled(details)
-                if time.monotonic() - started_at > limit:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait()
-                    raise TdlError(f"tdl command timed out after {limit} seconds")
-                time.sleep(1)
             stdout_file.seek(0)
             stderr_file.seek(0)
             stdout = stdout_file.read()
@@ -174,12 +179,22 @@ class TdlService:
             "topics_count": len(chat.get("topics") or []),
         }
 
-    def export_chat(self, chat_id: str, output_path: Path, should_cancel: Callable[[], bool] | None = None) -> str:
+    def export_chat(
+        self, chat_id: str, output_path: Path,
+        should_cancel: Callable[[], bool] | None = None,
+        id_range: tuple[int, int] | None = None,
+        last: int | None = None,
+    ) -> str:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        result = self._run(
-            ["chat", "export", "-c", chat_id, "--with-content", "--all", "-o", str(output_path)],
-            should_cancel=should_cancel,
-        )
+        temporary = output_path.with_name(output_path.name + ".partial")
+        args = ["chat", "export", "-c", chat_id, "--with-content", "--all", "-o", str(temporary)]
+        if id_range:
+            args.extend(["--type", "id", "--input", f"{id_range[0]},{id_range[1]}"])
+        elif last:
+            args.extend(["--type", "last", "--input", str(last)])
+        result = self._run(args, should_cancel=should_cancel)
+        json.loads(temporary.read_text(encoding="utf-8"))
+        temporary.replace(output_path)
         return result.stdout.strip()
 
     def download_from_file(
@@ -188,10 +203,13 @@ class TdlService:
         output_dir: Path,
         skip_same: bool = True,
         should_cancel: Callable[[], bool] | None = None,
+        progress_bytes: Callable[[], int] | None = None,
     ) -> str:
         output_dir.mkdir(parents=True, exist_ok=True)
-        args = ["download", "-f", str(filtered_json), "-d", str(output_dir)]
+        args = ["download", "-f", str(filtered_json), "-d", str(output_dir), "--restart",
+                "--template", "{{ .MessageID }}/{{ filenamify .FileName }}"]
         if skip_same:
             args.append("--skip-same")
-        result = self._run(args, should_cancel=should_cancel)
+        result = self._run(args, should_cancel=should_cancel, progress_bytes=progress_bytes,
+                           idle_timeout=settings.download_idle_timeout_seconds)
         return result.stdout.strip()

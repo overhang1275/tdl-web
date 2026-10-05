@@ -48,6 +48,36 @@ get_env_value() {
   grep -E "^$1=" "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true
 }
 
+ensure_transfer_settings() {
+  local key value
+  for key in DOWNLOAD_BATCH_SIZE DOWNLOAD_IDLE_TIMEOUT_SECONDS EXPORT_BATCH_SIZE; do
+    case "$key" in
+      DOWNLOAD_BATCH_SIZE) value=100 ;;
+      DOWNLOAD_IDLE_TIMEOUT_SECONDS) value=600 ;;
+      EXPORT_BATCH_SIZE) value=5000 ;;
+    esac
+    if [[ -z "$(get_env_value "$key")" ]]; then
+      set_env_value "$key" "$value"
+    fi
+  done
+}
+
+migrate_database() {
+  (
+    cd "$APP_DIR"
+    runuser -u "$APP_USER" -- "$VENV_DIR/bin/python" -c '
+import sys
+from pathlib import Path
+from app.config import load_env_file, settings
+load_env_file(Path(sys.argv[1]), override=True)
+settings.__init__()
+from app.database import init_db
+init_db()
+print("Database migration OK")
+' "$ENV_FILE"
+  )
+}
+
 apt-get update
 apt-get install -y python3 python3-venv python3-pip redis-server curl ca-certificates nginx rsync git wipe
 
@@ -108,6 +138,7 @@ set_env_value REDIS_URL "redis://127.0.0.1:6379/0"
 set_env_value TDL_BINARY "$(command -v tdl || echo /usr/local/bin/tdl)"
 set_env_value TDL_NAMESPACE default
 set_env_value COMMAND_TIMEOUT_SECONDS 7200
+ensure_transfer_settings
 
 cp "$APP_DIR/deploy/systemd/telegram-downloader-web.service" /etc/systemd/system/telegram-downloader-web.service
 cp "$APP_DIR/deploy/systemd/telegram-downloader-worker.service" /etc/systemd/system/telegram-downloader-worker.service
@@ -121,9 +152,13 @@ chmod 750 "$APP_ROOT" "$DATA_DIR"
 chmod 750 "$DATA_DIR/sessions" "$DATA_DIR/exports" "$MEDIA_DIR" "$DATA_DIR/logs"
 
 systemctl enable --now redis-server
+migrate_database
 systemctl daemon-reload
 systemctl enable telegram-downloader-web telegram-downloader-worker
 systemctl restart telegram-downloader-web telegram-downloader-worker
+for service in telegram-downloader-web telegram-downloader-worker; do
+  systemctl is-active --quiet "$service"
+done
 
 echo "Installed. Open http://SERVER_IP:8000"
 echo "tdl binary: $(command -v tdl || true)"

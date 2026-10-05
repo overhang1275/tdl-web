@@ -16,6 +16,33 @@ Aplicación FastAPI para convertir un flujo `tdl` basado en bash en una interfaz
 - Si la carpeta del job ya no existe, elimina solo el registro y deja rastro en logs.
 - Muestra progreso con HTMX polling.
 - Explora archivos descargados desde la UI.
+- Descarga por lotes independientes con registro por archivo y botón **Reintentar pendientes**.
+
+## Descargas grandes y reanudación
+
+Cada job conserva su selección y el estado de cada archivo en SQLite. El botón
+**Reintentar pendientes** continúa el mismo job sin volver a descargar sus archivos
+verificados. Aparece también si el job falla mientras estás mirando el progreso.
+Los temporales de tdl no cuentan como completados. Al reintentar se comprueba que
+los archivos registrados siguen existiendo y tienen el tamaño guardado.
+
+La exportación se divide en rangos de IDs y guarda su cursor. El cache del canal
+se reemplaza únicamente al completar todos los rangos. Cada lote de descarga y
+cada rango de exportación se ejecuta en una invocación RQ independiente.
+Los errores de descarga se reintentan hasta tres veces, aislando los mensajes
+problemáticos y esperando 15 y 60 segundos. Otros archivos continúan; los que
+agotan sus intentos quedan disponibles para reintento manual.
+
+Configuración opcional: `DOWNLOAD_BATCH_SIZE=100`, `EXPORT_BATCH_SIZE=5000`,
+`DOWNLOAD_IDLE_TIMEOUT_SECONDS=600`. `COMMAND_TIMEOUT_SECONDS` sigue siendo el
+límite máximo de cada invocación tdl. El scheduler de `app.rq_worker` debe estar
+activo para los reintentos con espera (ya se inicia con `with_scheduler=True`).
+
+Las nuevas descargas se guardan en la subcarpeta `job-<id>/<mensaje>/` del destino.
+Las descargas verificadas de otros jobs del mismo canal y destino se reutilizan
+cuando «omitir iguales» está activo. El JSON histórico de IDs se conserva, pero
+no se toma como prueba de que un archivo existe. Usa **Nuevo parecido** para
+hacer una búsqueda nueva; reintentar conserva la búsqueda original.
 
 ## Tecnologías y librerías
 
@@ -46,6 +73,48 @@ Por defecto en producción:
 - `/opt/tld-web/data/logs`
 - `/etc/telegram-downloader/telegram-downloader.env`
 
+### Carpetas de descargas
+
+La carpeta base se configura con `DOWNLOADS_DIR`. Las nuevas descargas siguen
+este formato:
+
+```text
+<DOWNLOADS_DIR>/<chat_id>/<subcarpeta>/job-<job_id>/<message_id>/<archivo>
+```
+
+Por ejemplo:
+
+```text
+/opt/tld-web/data/downloads/
+└── 123456789/              # Canal o grupo
+    └── videos/             # Subcarpeta elegida al crear el job
+        └── job-42/         # Trabajo de descarga
+            ├── 1501/       # Mensaje de Telegram
+            │   └── video.mp4
+            └── 1502/
+                └── documento.pdf
+```
+
+- **Canal o grupo:** separa el contenido de cada chat. Su ID se normaliza para
+  poder utilizarlo como nombre de carpeta.
+- **Subcarpeta:** es el destino elegido al crear el job, por ejemplo `videos`,
+  `documentos` o `download`.
+- **Job:** identifica el trabajo que descargó los archivos.
+- **Mensaje:** relaciona el archivo con su mensaje de Telegram, incluso si otros
+  mensajes tienen archivos con el mismo nombre.
+
+Durante la transferencia, tdl escribe un temporal como `video.mp4.tmp`. Cuando
+la descarga termina correctamente, lo renombra a `video.mp4` y el sistema
+registra el archivo completo en SQLite.
+
+**Reintentar pendientes** conserva el mismo ID de job y las mismas carpetas;
+continúa con los archivos pendientes o fallidos. Los archivos antiguos conservan
+su ubicación. Si está activo «omitir iguales» y otro job reutiliza un archivo
+verificado del mismo canal y destino, ese archivo permanece en su ubicación
+original y se registra la referencia sin crear otra copia.
+
+### Carpetas de exportación
+
 Los exports se guardan por chat:
 
 ```text
@@ -57,6 +126,11 @@ Cada job genera su propio filtrado:
 ```text
 /opt/tld-web/data/exports/<chat_id>/filtered-job-<job_id>.json
 ```
+
+También se guarda `export-job-<job_id>.json`, que conserva la exportación usada
+por ese trabajo. La carpeta `export-job-<job_id>/` contiene `latest.json` y los
+fragmentos `<id_inicial>-<id_final>.json` que permiten reanudar la exportación.
+`export.json` se reemplaza solo cuando todos los rangos están completos.
 
 Cuando creas un job desde `/jobs`, si ya existe `export.json` para ese chat, la UI pregunta si quieres actualizarlo. Si no marcas esa opción, el job reutiliza el export existente y solo vuelve a filtrar/descargar.
 
@@ -265,7 +339,11 @@ Desde el repo:
 sudo bash scripts/update.sh
 ```
 
-El script revisa cambios en el repo instalado (`/opt/tld-web/app`), sale sin detener servicios si no hay nada nuevo, detiene web + worker cuando sí hay update, respalda la base SQLite, pregunta si también quieres respaldar descargas, genera `WEB_PASSWORD` si falta, aplica `git pull --ff-only` o copia los archivos actuales, instala dependencias y vuelve a iniciar los servicios. Los backups quedan en `/opt/tld-web/data/backups`.
+El script revisa cambios en el repo instalado (`/opt/tld-web/app`), sale sin detener servicios si no hay cambios de código ni de configuración, detiene web + worker cuando sí hay update, respalda SQLite incluyendo datos pendientes del WAL y pregunta si también quieres respaldar descargas. Genera `WEB_PASSWORD` si falta, añade los valores de descarga por lotes sin reemplazar valores personalizados, aplica `git pull --ff-only` o copia los archivos actuales e instala dependencias.
+
+Antes de iniciar los servicios ejecuta la migración con el usuario y el archivo de entorno del servicio. Si falla la actualización o la migración, detiene los servicios y muestra el error; no reinicia automáticamente con una base incompatible. Al terminar comprueba que web y worker estén activos. La instalación también ejecuta la migración antes del primer inicio.
+
+Los backups quedan en `/opt/tld-web/data/backups`: `update-<fecha>.sqlite3` para la base y, si lo solicitas, `downloads-<fecha>.tgz` para las descargas.
 
 ## Backup
 
